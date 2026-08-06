@@ -1,0 +1,74 @@
+{
+  "status": "OK",
+  "type": "result",
+  "message": null,
+  "result": [
+    {
+      "id": "synthetic-marker-route",
+      "route_id": "synthetic/2gis/marker-route",
+      "algorithm": "с учётом пробок",
+      "reliability": 0,
+      "total_distance": 2400,
+      "total_duration": 300,
+      "begin_pedestrian_path": {
+        "geometry": {
+          "selection": ""
+        }
+      },
+      "end_pedestrian_path": {
+        "geometry": {
+          "selection": ""
+        }
+      },
+      "maneuvers": [
+        {
+          "id": "marker-begin",
+          "type": "begin",
+          "icon": "start",
+          "comment": "start",
+          "outcoming_path": {
+            "distance": 0,
+            "duration": 0,
+            "geometry": [
+              {
+                "color": "ignore",
+                "length": 0,
+                "style": "normal",
+                "selection": "LINESTRING(37.612568 55.752667, 37.612568 55.752667)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "marker-drive",
+          "type": "crossroad",
+          "outcoming_path": {
+            "distance": 2400,
+            "duration": 300,
+            "geometry": [
+              {
+                "color": "fast",
+                "length": 1600,
+                "style": "normal",
+                "selection": "LINESTRING(37.612568 55.752667, 37.620000 55.762000)"
+              },
+              {
+                "color": "slow",
+                "length": 800,
+                "style": "normal",
+                "selection": "LINESTRING(37.620000 55.762000, 37.625000 55.767000)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "marker-end",
+          "type": "end",
+          "icon": "finish",
+          "comment": "finish"
+        }
+      ],
+      "total_payments": []
+    }
+  ]
+}

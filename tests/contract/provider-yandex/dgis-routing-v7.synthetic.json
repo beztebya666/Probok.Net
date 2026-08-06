@@ -1,0 +1,90 @@
+{
+  "status": "OK",
+  "type": "result",
+  "message": null,
+  "result": [
+    {
+      "id": "synthetic-route-1",
+      "route_id": "synthetic/2gis/route-1",
+      "algorithm": "with traffic jams",
+      "reliability": 1,
+      "total_distance": 3200,
+      "total_duration": 420,
+      "begin_pedestrian_path": {
+        "geometry": {
+          "selection": "LINESTRING(37.610000 55.750000, 37.610100 55.750100)"
+        }
+      },
+      "maneuvers": [
+        {
+          "id": "m-1",
+          "type": "begin",
+          "outcoming_path": {
+            "distance": 1500,
+            "duration": 180,
+            "geometry": [
+              {
+                "color": "fast",
+                "length": 700,
+                "selection": "LINESTRING(37.610100 55.750100 1200, 37.615000 55.755000 1210)"
+              },
+              {
+                "color": "slow",
+                "length": 800,
+                "selection": "LINESTRING(37.615000 55.755000 1210, 37.620000 55.760000 1220)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "m-2",
+          "type": "crossroad",
+          "outcoming_path": {
+            "distance": 1700,
+            "duration": 240,
+            "geometry": [
+              {
+                "color": "normal",
+                "length": 1700,
+                "selection": "LINESTRING(37.620000 55.760000, 37.630000 55.765000, 37.640000 55.770000)"
+              }
+            ]
+          }
+        }
+      ],
+      "end_pedestrian_path": {
+        "geometry": {
+          "selection": "LINESTRING(37.640000 55.770000, 37.640100 55.770100)"
+        }
+      },
+      "total_payments": [
+        {"currency": "RUB", "amount": 100}
+      ]
+    },
+    {
+      "id": "synthetic-route-2",
+      "route_id": "synthetic/2gis/route-2",
+      "algorithm": "with traffic jams",
+      "total_distance": 3500,
+      "total_duration": 460,
+      "maneuvers": [
+        {
+          "id": "m-1",
+          "type": "begin",
+          "outcoming_path": {
+            "distance": 3500,
+            "duration": 460,
+            "geometry": [
+              {
+                "color": "ignore",
+                "length": 3500,
+                "selection": "LINESTRING(37.610000 55.750000, 37.625000 55.758000, 37.640000 55.770000)"
+              }
+            ]
+          }
+        }
+      ],
+      "total_payments": []
+    }
+  ]
+}

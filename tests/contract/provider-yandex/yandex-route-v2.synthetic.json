@@ -1,0 +1,69 @@
+{
+  "traffic_type": "realtime",
+  "routes": [
+    {
+      "legs": [
+        {
+          "status": "OK",
+          "steps": [
+            {
+              "duration": 120.4,
+              "length": 1510.2,
+              "mode": "driving",
+              "waiting_duration": 0,
+              "polyline": {
+                "points": [
+                  [55.7500000, 37.6100000],
+                  [55.7550000, 37.6200000],
+                  [55.7600000, 37.6300000]
+                ]
+              }
+            },
+            {
+              "duration": 180.6,
+              "length": 2490.8,
+              "mode": "driving",
+              "waiting_duration": 0,
+              "polyline": {
+                "points": [
+                  [55.7600000, 37.6300000],
+                  [55.7700000, 37.6400000]
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "flags": {
+        "hasTolls": false,
+        "hasNonTransactionalTolls": false
+      }
+    },
+    {
+      "legs": [
+        {
+          "status": "OK",
+          "steps": [
+            {
+              "duration": 340.0,
+              "length": 4300.0,
+              "mode": "driving",
+              "waiting_duration": 0,
+              "polyline": {
+                "points": [
+                  [55.7500000, 37.6100000],
+                  [55.7450000, 37.6250000],
+                  [55.7700000, 37.6400000]
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "flags": {
+        "hasTolls": true,
+        "hasNonTransactionalTolls": false
+      }
+    }
+  ]
+}
