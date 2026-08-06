@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import { isVerifiedAllGreenRoute, routeCandidatesForMode, segmentColor } from "@/lib/route-insights";
+import { TileMap } from "./tile-map";
 import type { TrafficProvider } from "@/lib/route-presets";
 import type { GeoPoint, RouteCandidate, RouteSearchResult, RoutingMode } from "@/lib/schemas";
 import { useResolvedTheme } from "@/lib/use-resolved-theme";
@@ -743,7 +744,18 @@ export function RouteMap({
 
   return (
     <section ref={stageRef} className="map-stage" aria-label={t("mapRegion")}>
-      <SchematicMap routes={visibleRoutes} selectedRoute={visibleSelectedRoute} label={t("mapFallbackTitle")} hidden={status === "ready"} />
+      {/* Real streets from OpenStreetMap when there is no provider key; the
+          abstract grid only remains for the moment before the map has size. */}
+      {status === "ready" ? (
+        <SchematicMap routes={visibleRoutes} selectedRoute={visibleSelectedRoute} label={t("mapFallbackTitle")} hidden />
+      ) : (
+        <TileMap
+          routes={visibleRoutes}
+          selectedRoute={visibleSelectedRoute}
+          segmentColor={segmentColor}
+          label={t("mapFallbackTitle")}
+        />
+      )}
       <div
         ref={containerRef}
         className={`map-canvas map-renderer-${activeRenderer} ${status === "ready" ? "is-ready" : ""}`}

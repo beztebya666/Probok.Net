@@ -38,7 +38,7 @@ export function proxy(request: NextRequest) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://api-maps.yandex.ru https://yastatic.net https://mapgl.2gis.com${isDevelopment ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline' https://yastatic.net https://*.2gis.com https://*.2gis.ru",
-    "img-src 'self' data: blob: https://*.maps.yandex.net https://yastatic.net https://*.yandex.ru https://*.2gis.com https://*.2gis.ru",
+    "img-src 'self' data: blob: https://*.maps.yandex.net https://yastatic.net https://*.yandex.ru https://*.2gis.com https://*.2gis.ru https://tile.openstreetmap.org",
     "font-src 'self' data: https://yastatic.net https://*.2gis.com https://*.2gis.ru",
     `connect-src ${connectSources.join(" ")}`,
     // Yandex JS API v3 bootstraps its documented workers from data: URLs;

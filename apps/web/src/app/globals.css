@@ -1380,6 +1380,30 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 @keyframes pop-in { from { opacity: 0; transform: translateY(4px); } }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px); } }
 
+/* ============================ Keyless map ================================ */
+
+.tile-map { position: absolute; inset: 0; overflow: hidden; background: var(--map-fallback-bg); }
+.tile-map-tiles { position: absolute; inset: 0; }
+.tile-map-tiles img { position: absolute; width: 256px; height: 256px; }
+.tile-map-overlay { position: absolute; top: 0; left: 0; }
+.tile-map-credit {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  padding: 2px 6px;
+  color: var(--ink-2);
+  font-size: 9px;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border-radius: var(--radius-sm);
+}
+/* OSM raster tiles are a light-theme map; inverting keeps the dark UI coherent
+   without shipping a second tile source. */
+[data-theme="dark"] .tile-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(.86) contrast(.92); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tile-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(.86) contrast(.92); }
+}
+
 /* ============================ Demo toast ================================= */
 
 .demo-toast {
