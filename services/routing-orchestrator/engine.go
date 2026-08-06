@@ -459,6 +459,43 @@ func (e *engine) enhance(ctx context.Context, request domain.RouteSearchRequest,
 	const minimumSeverity = 1
 	tried := make(map[string]bool, 8)
 	probes, consecutiveErrors := 0, 0
+
+	// A toll road is only worth paying for if it buys something. When the best
+	// route so far uses one, ask the provider for the same trip without tolls
+	// and let the two compete on green share like any other pair of candidates.
+	if e.config.EnableTollFreeProbe && !request.AvoidTolls && anyTollRoute(candidates) {
+		if _, remaining, exhausted := budget.snapshot(); !exhausted && remaining > 0 && ctx.Err() == nil {
+			tollFree := contracts.ProviderRouteRequest{
+				RequestID: request.RequestID, Origin: request.Origin, Destination: request.Destination,
+				Waypoints: append([]domain.GeoPoint(nil), request.Waypoints...), Traffic: true,
+				Alternatives: minInt(2, maxInt(0, capabilities.MaxAlternatives)),
+				AvoidTolls:   true, AvoidUnpaved: request.AvoidUnpaved,
+				DepartureUnix: departureUnix(request), DeadlineMS: maxInt(500, request.SearchDeadlineMS/2),
+				RequestBudget: remaining,
+			}
+			e.appendEvent(result.SearchID, domain.EventDetourSearchStarted, "Comparing a toll-free alternative", nil, nil, map[string]interface{}{
+				"strategy": "TOLL_FREE_ALTERNATIVE",
+			})
+			if response, err := e.routeWithBudget(ctx, budget, tollFree); err == nil {
+				capacity := maxInt(0, e.config.MaxActiveCandidates-len(candidates))
+				incoming, _ := sanitizeProviderCandidates(response.Candidates, capacity, "TOLL_FREE_ALTERNATIVE")
+				kept := incoming[:0]
+				for _, candidate := range incoming {
+					if connectsSameTrip(candidate, *base, detourEndpointToleranceMeters) {
+						kept = append(kept, candidate)
+					}
+				}
+				if len(kept) > 0 {
+					evaluated := e.evaluateAll(ctx, result.SearchID, request, kept, budget, true)
+					deduplicated, dropped := geometry.Deduplicate(append(candidates, evaluated...), geometry.DefaultDedupeConfig())
+					candidates = deduplicated
+					e.metrics.CandidatesDeduplicated.Add(float64(dropped))
+					result.GreenTopRoutes = topGreenRoutes(candidates, greenTopRouteCount)
+				}
+			}
+		}
+	}
+
 	for iteration := 0; iteration < e.config.MaxEnhancedIterations; iteration++ {
 		_, remaining, exhausted := budget.snapshot()
 		if exhausted || remaining == 0 || ctx.Err() != nil || len(candidates) >= e.config.MaxActiveCandidates {
@@ -1087,4 +1124,16 @@ func max64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// anyTollRoute reports whether the pool contains a route that charges for using
+// it, which is the only situation where a toll-free comparison is worth a
+// provider request.
+func anyTollRoute(candidates []domain.RouteCandidate) bool {
+	for index := range candidates {
+		if candidates[index].Tolls {
+			return true
+		}
+	}
+	return false
 }

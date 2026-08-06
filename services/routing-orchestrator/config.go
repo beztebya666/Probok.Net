@@ -10,18 +10,22 @@ import (
 )
 
 type config struct {
-	Environment             string
-	Address                 string
-	ProviderURL             string
-	InternalToken           string
-	RedisURL                string
-	RequireRedis            bool
-	ProviderDataStorage     bool
-	StateTTL                time.Duration
-	StaleSearchAfter        time.Duration
-	EnableEnhancedSearch    bool
-	EnableAvoidZones        bool
-	EnableCorridorAnchors   bool
+	Environment           string
+	Address               string
+	ProviderURL           string
+	InternalToken         string
+	RedisURL              string
+	RequireRedis          bool
+	ProviderDataStorage   bool
+	StateTTL              time.Duration
+	StaleSearchAfter      time.Duration
+	EnableEnhancedSearch  bool
+	EnableAvoidZones      bool
+	EnableCorridorAnchors bool
+	// One extra probe that repeats the search with toll roads excluded, so a
+	// paid route can be compared against the free alternative it is supposed to
+	// beat. Costs a provider request, and only when a toll route was found.
+	EnableTollFreeProbe     bool
 	EnableReranking         bool
 	MaxActiveCandidates     int
 	MaxConcurrentSearches   int
@@ -56,6 +60,9 @@ func loadConfig() (config, error) {
 	// instrument, not an experiment: without it the provider routes straight
 	// back onto the jam the detour was supposed to avoid.
 	if c.EnableAvoidZones, err = envBool("ENABLE_AVOID_ZONE_GENERATION", true); err != nil {
+		return config{}, err
+	}
+	if c.EnableTollFreeProbe, err = envBool("ENABLE_TOLL_FREE_PROBE", true); err != nil {
 		return config{}, err
 	}
 	if c.EnableCorridorAnchors, err = envBool("ENABLE_CORRIDOR_ANCHORS", true); err != nil {
