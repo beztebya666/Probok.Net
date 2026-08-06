@@ -98,6 +98,7 @@ jobs:
             echo 'value<<TAGS'
             cat "$RUNNER_TEMP/tags.txt"
             echo TAGS
+            echo "image=$REGISTRY/${GITHUB_REPOSITORY,,}/$COMPONENT"
           } >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/tags.txt"
       - id: build
@@ -117,26 +118,26 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
+          subject-name: ${{ steps.tags.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Keyless sign exact manifest digest
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
+          IMAGE: ${{ steps.tags.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
       - name: Scan exact pushed digest
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ steps.tags.outputs.image }}@${{ steps.build.outputs.digest }}
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
         with:
-          image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+          image: ${{ steps.tags.outputs.image }}@${{ steps.build.outputs.digest }}
           format: cyclonedx-json
           output-file: dist/${{ matrix.component }}/sbom.cdx.json
           upload-artifact: false
@@ -454,15 +455,15 @@ jobs:
           helm_args=(
             --namespace "$RELEASE_NAMESPACE"
             --values "$values"
-            --set-string "images.edgeApi.repository=$REGISTRY/$GITHUB_REPOSITORY/edge-api"
+            --set-string "images.edgeApi.repository=$REGISTRY/${GITHUB_REPOSITORY,,}/edge-api"
             --set-string "images.edgeApi.digest=$edge_digest"
-            --set-string "images.routingOrchestrator.repository=$REGISTRY/$GITHUB_REPOSITORY/routing-orchestrator"
+            --set-string "images.routingOrchestrator.repository=$REGISTRY/${GITHUB_REPOSITORY,,}/routing-orchestrator"
             --set-string "images.routingOrchestrator.digest=$orchestrator_digest"
-            --set-string "images.providerYandex.repository=$REGISTRY/$GITHUB_REPOSITORY/provider-yandex"
+            --set-string "images.providerYandex.repository=$REGISTRY/${GITHUB_REPOSITORY,,}/provider-yandex"
             --set-string "images.providerYandex.digest=$provider_digest"
-            --set-string "images.web.repository=$REGISTRY/$GITHUB_REPOSITORY/web"
+            --set-string "images.web.repository=$REGISTRY/${GITHUB_REPOSITORY,,}/web"
             --set-string "images.web.digest=$web_digest"
-            --set-string "images.oauth2Proxy.repository=$REGISTRY/$GITHUB_REPOSITORY/oauth2-proxy"
+            --set-string "images.oauth2Proxy.repository=$REGISTRY/${GITHUB_REPOSITORY,,}/oauth2-proxy"
             --set-string "images.oauth2Proxy.digest=$oauth2_proxy_digest"
             --set-string "secrets.existingSecret=$RUNTIME_SECRET_NAME"
             --set-literal "config.oidcIssuerUrl=$OIDC_ISSUER_URL"
