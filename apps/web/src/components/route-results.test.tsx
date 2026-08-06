@@ -48,8 +48,9 @@ describe("RouteResults", () => {
       </LocaleProvider>,
     );
 
+    // ADR-014: the fast route is never offered as a strict-green answer.
     expect(screen.queryByText("Самый быстрый")).not.toBeInTheDocument();
-    expect(screen.getByTestId("strict-green-empty")).toHaveTextContent("Полностью зелёного маршрута не нашлось");
+    expect(screen.queryByTestId("route-card-route-fastest")).not.toBeInTheDocument();
   });
 
   it("still lists what the search found when strict mode qualifies nothing", async () => {

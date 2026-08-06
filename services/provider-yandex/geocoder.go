@@ -113,7 +113,7 @@ func (a *yandexAdapter) doGeocode(ctx context.Context, query, language string, l
 		return contracts.GeosuggestResponse{}, serviceError("PROVIDER_REQUEST_INVALID", "address request could not be constructed", http.StatusInternalServerError, false, err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "GreenRoute-provider-yandex/1.0")
+	request.Header.Set("User-Agent", "ProbokNet-provider-yandex/1.0")
 
 	response, err := a.client.Do(request)
 	if err != nil {

@@ -277,7 +277,7 @@ func (a *dgisAdapter) doRoute(ctx context.Context, request contracts.ProviderRou
 	}
 	httpRequest.Header.Set("Accept", "application/json")
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("User-Agent", "GreenRoute-provider/1.0")
+	httpRequest.Header.Set("User-Agent", "ProbokNet-provider/1.0")
 
 	httpResponse, err := a.client.Do(httpRequest)
 	if err != nil {
@@ -661,7 +661,7 @@ func normalizeDGISRoute(request contracts.ProviderRouteRequest, routeIndex int, 
 		ProviderRouteReference: strings.TrimSpace(route.RouteID), TrafficDataType: dataType,
 		Geometry: geometry, DistanceMeters: distanceMeters, Segments: segments,
 		Tolls: rawCollectionNonEmpty(route.TotalPayments), Confidence: confidence, ReasonCodes: reasonCodes,
-		Explanation: "GreenRoute разбил официальный маршрут 2ГИС на цветовые участки ответа Routing API; цвет отражает оценку GreenRoute на момент запроса.",
+		Explanation: "Официальный маршрут 2ГИС разобран на цветовые участки ответа Routing API; цвет — наша оценка на момент запроса.",
 		GeneratedBy: "INITIAL_PROVIDER",
 	}
 	if dataType == domain.TrafficDataBaseline {

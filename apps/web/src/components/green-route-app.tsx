@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import {
   parseTrafficProvider,
+  initialTrafficProvider,
   readTrafficProvider,
   TRAFFIC_PROVIDER_STORAGE_KEY,
   writeTrafficProvider,
@@ -85,7 +86,7 @@ export function GreenRouteApp() {
     } catch {
       storage = undefined;
     }
-    const initial = readTrafficProvider(storage);
+    const initial = initialTrafficProvider(storage, Boolean(config.twoGisMapGLBrowserKey));
     window.queueMicrotask(() => {
       if (active) setTrafficProvider(initial);
     });
@@ -97,6 +98,7 @@ export function GreenRouteApp() {
       active = false;
       window.removeEventListener("storage", syncStorage);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A demo that opens empty looks broken. The shipped analysis fills the first

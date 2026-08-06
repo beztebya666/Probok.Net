@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
-import { isVerifiedAllGreenRoute, routeCandidatesForMode, segmentColor } from "@/lib/route-insights";
+import { displayedRoutes, segmentColor } from "@/lib/route-insights";
 import { TileMap } from "./tile-map";
 import type { TrafficProvider } from "@/lib/route-presets";
 import type { GeoPoint, RouteCandidate, RouteSearchResult, RoutingMode } from "@/lib/schemas";
@@ -472,13 +472,19 @@ export function RouteMap({
     onTrafficProviderChange?.(provider);
   };
   const activeRenderer: Exclude<TrafficRenderer, "yandex"> = trafficRenderer === "2gis" && twoGisBrowserKey ? "2gis" : "off";
-  // OpenStreetMap is shown when it is asked for and never as a silent
-  // substitute: a development build with a missing key must still say so.
-  const showOsm = trafficRenderer === "osm";
+  // OpenStreetMap is shown when it is asked for, and when there is no provider
+  // map to show at all — in which case the picker says so on the buttons rather
+  // than a banner explaining a key the reader was never meant to have.
+  const providerMapConfigured = Boolean(browserKey) || Boolean(twoGisBrowserKey);
+  const showOsm = trafficRenderer === "osm" || !providerMapConfigured;
   const mapConfigured = activeRenderer === "2gis" ? Boolean(twoGisBrowserKey) : Boolean(browserKey);
-  const routes = useMemo(() => result ? routeCandidatesForMode(result, routingMode) : [], [result, routingMode]);
-  const strictSelected = routingMode === "STRICT_GREEN" && !isVerifiedAllGreenRoute(selectedRoute) ? undefined : selectedRoute;
-  const visibleSelectedRoute = previewRoute ?? strictSelected;
+  const routes = useMemo(() => result ? displayedRoutes(result, routingMode) : [], [result, routingMode]);
+  // Whatever the panel lists, the map draws — a card that cannot be shown is
+  // worse than no card, and that is what "Выбрать" used to do in strict mode.
+  const shownSelected = selectedRoute && routes.some((route) => route.candidateId === selectedRoute.candidateId)
+    ? selectedRoute
+    : routes[0];
+  const visibleSelectedRoute = previewRoute ?? shownSelected;
   const visibleRoutes = useMemo(
     () => renderedRoutes(previewRoute ? [previewRoute, ...routes] : routes, visibleSelectedRoute),
     [previewRoute, routes, visibleSelectedRoute],
@@ -493,6 +499,7 @@ export function RouteMap({
     geolocationError: "Не удалось определить местоположение",
     traffic: "Пробки",
     trafficOff: "Выкл",
+    trafficOffUnavailable: "Нужен ключ карты провайдера",
     trafficYandex: "Яндекс",
     trafficTwoGis: "2ГИС",
     trafficOsm: "OSM",
@@ -511,6 +518,7 @@ export function RouteMap({
     geolocationError: "Unable to determine location",
     traffic: "Traffic",
     trafficOff: "Off",
+    trafficOffUnavailable: "A provider map key is required",
     trafficYandex: "Yandex",
     trafficTwoGis: "2GIS",
     trafficOsm: "OSM",
@@ -774,8 +782,16 @@ export function RouteMap({
           <span className="sr-only">{labels.traffic}</span>
         </span>
         <div className="traffic-renderer-segments" role="radiogroup" aria-labelledby="traffic-renderer-label">
-          <button type="button" role="radio" aria-checked={trafficRenderer === "off"} onClick={() => selectTrafficProvider("off")}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={trafficRenderer === "off" && providerMapConfigured}
+            aria-disabled={!providerMapConfigured}
+            title={providerMapConfigured ? labels.trafficOff : labels.trafficOffUnavailable}
+            onClick={() => { if (providerMapConfigured) selectTrafficProvider("off"); }}
+          >
             {labels.trafficOff}
+            {!providerMapConfigured && <span className="traffic-renderer-reason" aria-hidden="true">{labels.trafficOffUnavailable}</span>}
           </button>
           <button
             type="button"
@@ -838,8 +854,9 @@ export function RouteMap({
       )}
       {geolocationState === "error" && <span className="sr-only" role="status">{labels.geolocationError}</span>}
 
-      {/* Nothing to report while OpenStreetMap is the chosen map. */}
-      {(status === "loading" || status === "error" || status === "fallback") && !showOsm && (
+      {/* Only a genuine failure is worth a message: "no key configured" is a
+          deployment fact the picker already shows, not news for the reader. */}
+      {(status === "loading" || status === "error") && !showOsm && (
         <div className={`map-status map-status-${status}`} role="status">
           <span className="map-status-dot" aria-hidden="true" />
           <span className="map-status-text">

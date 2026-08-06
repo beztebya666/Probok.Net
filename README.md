@@ -174,13 +174,14 @@
 </tr>
 </table>
 
-> Скриншоты и клипы сняты в демо-режиме (в шапке видна плашка «Демо-данные»): геометрия дорог и
-> карта настоящие, цвета участков — фиксированный синтетический набор. Демо ходит по картам
-> OpenStreetMap: ключа провайдера в публичной статике нет, поэтому слой пробок там недоступен.
+> Скриншоты сняты с боевого стека: карта и слой пробок — 2ГИС, данные маршрутов — реальный ответ
+> провайдера. Клипы сняты с демо-сборки, поэтому карта там OpenStreetMap: ключа провайдера в
+> публичной статике нет и быть не должно.
 > Так документацию можно пересобрать в любой момент, не тратя дневную квоту Routing API.
-> Пересборка: `tools/docs-media/` — [build-demo-analysis.mjs](tools/docs-media/build-demo-analysis.mjs),
-> [shoot.mjs](tools/docs-media/shoot.mjs), [record.mjs](tools/docs-media/record.mjs),
-> [build-clips.py](tools/docs-media/build-clips.py), [optimise-images.py](tools/docs-media/optimise-images.py).
+> Пересборка: `tools/docs-media/` — [freeze-live-search.mjs](tools/docs-media/freeze-live-search.mjs)
+> снимает боевой поиск, [record.mjs](tools/docs-media/record.mjs) и
+> [build-clips.py](tools/docs-media/build-clips.py) собирают клипы,
+> [optimise-images.py](tools/docs-media/optimise-images.py) жмёт картинки.
 
 ---
 

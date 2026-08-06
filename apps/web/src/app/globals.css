@@ -1110,6 +1110,10 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 .eyebrow { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: var(--ink-3); font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .eyebrow svg { width: 13px; height: 13px; }
 .results-content { display: grid; gap: 12px; }
+/* The results panel is read, not copied: dragging across it used to select the
+   whole column. Numbers stay selectable, the labels around them do not. */
+.results-panel { user-select: none; -webkit-user-select: none; }
+.results-panel strong, .results-panel .route-green-share, .results-panel .flow-summary { user-select: text; -webkit-user-select: text; }
 .results-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .results-heading h2 { margin: 0; font-size: 20px; line-height: 1.15; }
 .results-heading-actions { display: flex; flex: none; align-items: center; gap: 4px; }

@@ -152,7 +152,7 @@ func (g *dgisGeocoder) doGeocode(ctx context.Context, query, language string, li
 		return contracts.GeosuggestResponse{}, serviceError("PROVIDER_REQUEST_INVALID", "geocoder request could not be constructed", http.StatusInternalServerError, false, err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "GreenRoute-provider/1.0")
+	request.Header.Set("User-Agent", "ProbokNet-provider/1.0")
 	response, err := g.client.Do(request)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {

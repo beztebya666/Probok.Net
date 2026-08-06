@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, cancelRouteSearch, createRouteSearch, getRouteSearch } from "./api-client";
-import { defaultCandidateId, routeCandidatesForMode, selectedCandidateForMode } from "./route-insights";
+import { defaultCandidateId, displayedRoutes, displayedSelectedRoute } from "./route-insights";
 import { clearCachedRouteResult, readCachedRouteResult, writeCachedRouteResult } from "./route-result-cache";
 import {
   terminalStatuses,
@@ -329,7 +329,10 @@ export function useRouteSearch() {
   const selectCandidate = useCallback((candidateId: string) => {
     selectionTouchedRef.current = true;
     setState((current) => {
-      if (!current.result || !routeCandidatesForMode(current.result, current.routingMode).some((route) => route.candidateId === candidateId)) return current;
+      // Validated against what the interface actually offers. Checking the
+      // mode filter instead meant every click was dropped in silence whenever
+      // the filter qualified nothing — the card stayed on "Выбрать" for ever.
+      if (!current.result || !displayedRoutes(current.result, current.routingMode).some((route) => route.candidateId === candidateId)) return current;
       return { ...current, selectedCandidateId: candidateId };
     });
   }, []);
@@ -346,7 +349,7 @@ export function useRouteSearch() {
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   const selectedRoute = state.result
-    ? selectedCandidateForMode(state.result, state.selectedCandidateId, state.routingMode)
+    ? displayedSelectedRoute(state.result, state.selectedCandidateId, state.routingMode)
     : undefined;
 
   return { state, start, cancel, reset, selectCandidate, restoreResult, selectedRoute };

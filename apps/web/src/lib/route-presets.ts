@@ -174,3 +174,24 @@ export function writeTrafficProvider(provider: TrafficProvider, storage?: Pick<S
     // Keep the current in-memory preference when persistence is unavailable.
   }
 }
+
+/**
+ * The map a first-time visitor should land on.
+ *
+ * With a 2GIS browser key configured the traffic map is the whole point of the
+ * product, so it is the default; without one there is nothing to default to.
+ * A stored choice always wins — this only fills the gap before there is one.
+ */
+export function initialTrafficProvider(
+  storage: Pick<Storage, "getItem"> | undefined,
+  twoGisMapConfigured: boolean,
+): TrafficProvider {
+  let stored: string | null = null;
+  try {
+    stored = storage?.getItem(TRAFFIC_PROVIDER_STORAGE_KEY) ?? null;
+  } catch {
+    stored = null;
+  }
+  if (stored) return parseTrafficProvider(stored);
+  return twoGisMapConfigured ? "2gis" : "off";
+}

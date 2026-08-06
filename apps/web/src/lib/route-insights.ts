@@ -193,3 +193,30 @@ export function formatDuration(seconds: number, locale: "ru" | "en"): string {
   if (!hours) return `${minutes} ${locale === "ru" ? "мин" : "min"}`;
   return locale === "ru" ? `${hours} ч ${rest} мин` : `${hours} h ${rest} min`;
 }
+
+/**
+ * The routes the interface shows for a mode — one answer for the list and the
+ * map, so a card can never offer a route the map refuses to draw.
+ *
+ * When the strict mode qualifies nothing, the ranked candidates are shown
+ * instead of an empty screen, minus the fastest reference: strict mode must
+ * never present the fast route as its answer (ADR-014).
+ */
+export function displayedRoutes(result: RouteSearchResult, routingMode?: RoutingMode): RouteCandidate[] {
+  const qualified = routeCandidatesForMode(result, routingMode);
+  if (qualified.length > 0) return qualified;
+  const reference = result.fastestReferenceRoute?.candidateId;
+  return greenRankedRoutes(result, 3).filter(
+    (route) => routingMode !== "STRICT_GREEN" || route.candidateId !== reference,
+  );
+}
+
+/** The route the map draws: the chosen one, or the best of what is shown. */
+export function displayedSelectedRoute(
+  result: RouteSearchResult,
+  selectedCandidateId: string | undefined,
+  routingMode?: RoutingMode,
+): RouteCandidate | undefined {
+  const shown = displayedRoutes(result, routingMode);
+  return shown.find((route) => route.candidateId === selectedCandidateId) ?? shown[0];
+}

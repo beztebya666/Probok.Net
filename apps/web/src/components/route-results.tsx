@@ -9,10 +9,9 @@ import {
   formatDistance,
   formatDuration,
   greenDistancePercent,
-  greenRankedRoutes,
+  displayedRoutes,
   greenTimePercent,
   isVerifiedAllGreenRoute,
-  routeCandidatesForMode,
   unknownPercent,
 } from "@/lib/route-insights";
 import { twoGisRouteUrl, yandexRouteUrl } from "@/lib/external-links";
@@ -75,7 +74,10 @@ function RouteCard({
   const extraDistance = Math.max(0, route.distanceMeters - (reference?.distanceMeters ?? route.distanceMeters));
   const extraTime = Math.max(0, route.liveDurationSeconds - (reference?.liveDurationSeconds ?? route.liveDurationSeconds));
   const unknown = unknownPercent(route);
-  const reasons = [...new Set([...route.reasonCodes, ...route.confidence.reasons])].slice(0, 3);
+  const reasons = [...new Set([...route.reasonCodes, ...route.confidence.reasons])]
+    .map((code) => ({ code, label: reasonLabel(code, locale) }))
+    .filter((reason) => reason.label)
+    .slice(0, 3);
 
   return (
     <article className={`route-card ${selected ? "is-selected" : ""}`} data-testid={`route-card-${route.candidateId}`}>
@@ -142,8 +144,7 @@ function RouteCard({
 
       <details className="route-reasons">
         <summary>{t("why")}</summary>
-		<p className="route-explanation">{route.explanation}</p>
-        <ul>{reasons.map((reason) => <li key={reason}>{reasonLabel(reason, locale)}</li>)}</ul>
+        <ul>{reasons.map((reason) => <li key={reason.code}>{reason.label}</li>)}</ul>
       </details>
 
       <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
@@ -153,6 +154,15 @@ function RouteCard({
     </article>
   );
 }
+
+const USER_FACING_WARNINGS = new Set([
+  "PROVIDER_DEGRADED",
+  "PROVIDER_QUOTA_EXHAUSTED",
+  "PROVIDER_RATE_LIMITED",
+  "GREEN_OPTIMIZATION_UNAVAILABLE",
+  "DETOUR_SEARCH_STOPPED_EARLY",
+  "PARTIAL_RESULTS",
+]);
 
 export function RouteResults({
   result,
@@ -183,30 +193,27 @@ export function RouteResults({
   onDismiss?: (() => void) | undefined;
 }) {
   const { locale, t } = useLocale();
-  const routes = useMemo(() => routeCandidatesForMode(result, routingMode), [result, routingMode]);
-  // Everything the search found, best green share first. In the strict mode the
-  // list is what did not qualify, which is more use than an empty panel.
-  const ranked = useMemo(() => greenRankedRoutes(result, 3), [result]);
+  // The same set the map draws.
+  const listed = useMemo(() => displayedRoutes(result, routingMode), [result, routingMode]);
   const measuredAt = useMemo(() => {
     const stamp = Date.parse(result.generatedAt);
     return Number.isFinite(stamp) ? new Date(stamp).toLocaleString(locale) : undefined;
   }, [result.generatedAt, locale]);
   const strictGreenUnavailable = routingMode === "STRICT_GREEN" && !isVerifiedAllGreenRoute(result.selectedRoute);
-  const greenest = findGreenest(routes);
-  const reference = result.fastestReferenceRoute ?? [...routes].sort((a, b) => a.liveDurationSeconds - b.liveDurationSeconds)[0];
+  const greenest = findGreenest(listed);
+  const reference = result.fastestReferenceRoute ?? [...listed].sort((a, b) => a.liveDurationSeconds - b.liveDurationSeconds)[0];
   const recommendedId = result.selectedRoute?.candidateId;
   // Green share is the ranking this product is about, so it is the order of the
   // list; the reference route trails it as the thing being compared against.
-  // Strict mode must never present the fast route as an answer, so when nothing
-  // qualifies the fallback list shows the candidates without it (ADR-014).
-  const listed = routes.length > 0
-    ? routes
-    : ranked.filter((route) => !strictGreenUnavailable || route.candidateId !== reference?.candidateId);
   const ordered = [...listed].sort((a, b) => {
     if (a.candidateId === reference?.candidateId) return 1;
     if (b.candidateId === reference?.candidateId) return -1;
     return greenTimePercent(b) - greenTimePercent(a) || a.liveDurationSeconds - b.liveDurationSeconds;
   });
+  // Most warnings are engineering telemetry: billing estimates, provider
+  // bookkeeping, codes with no translation. The panel keeps the few that change
+  // what the reader should believe about the answer; the rest stay in the API.
+  const actionable = result.warnings.filter((warning) => USER_FACING_WARNINGS.has(warning.code));
   const degraded = result.status === "DEGRADED" || result.warnings.some((warning) => ["PROVIDER_DEGRADED", "GREEN_OPTIMIZATION_UNAVAILABLE"].includes(warning.code));
 
   return (
@@ -257,22 +264,12 @@ export function RouteResults({
       </div>
 
 
-      {strictGreenUnavailable && (
-        <div className="notice notice-warning" role="status" data-testid="strict-green-empty">
-          <AlertIcon />
-          <div>
-            <strong>{t("strictEmptyTitle")}</strong>
-            <p>{t("strictEmptyBody")}</p>
-          </div>
-        </div>
-      )}
-
       {!strictGreenUnavailable && degraded && (
         <div className="notice notice-warning" role="status"><AlertIcon /><div><strong>{t("degradedTitle")}</strong><p>{t("degradedBody")}</p></div></div>
       )}
-      {!strictGreenUnavailable && result.warnings.length > 0 && (
+      {!strictGreenUnavailable && actionable.length > 0 && (
         <div className="warning-list" aria-label={t("warningTitle")}>
-          {result.warnings.map((warning, index) => (
+          {actionable.map((warning, index) => (
             <p key={`${warning.code}-${index}`}><InfoIcon />{warningLabel(warning.code, warning.message, locale)}</p>
           ))}
         </div>

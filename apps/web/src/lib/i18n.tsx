@@ -429,7 +429,8 @@ export function reasonLabel(code: string, locale: Locale): string {
     NO_GREEN_ROUTE_AVAILABLE: ["Подтвердить полностью свободный маршрут не удалось", "A fully free-flowing route could not be confirmed"],
   };
   const label = labels[code];
-  return label ? label[locale === "ru" ? 0 : 1] : code.replaceAll("_", " ").toLocaleLowerCase(locale);
+  // A raw code shown to a reader is noise, not information.
+  return label ? label[locale === "ru" ? 0 : 1] : "";
 }
 
 export function warningLabel(code: string, message: string | undefined, locale: Locale): string {

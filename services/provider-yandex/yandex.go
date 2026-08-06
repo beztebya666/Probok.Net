@@ -170,7 +170,7 @@ func (a *yandexAdapter) doRoute(ctx context.Context, request contracts.ProviderR
 		return contracts.ProviderRouteResponse{}, serviceError("PROVIDER_REQUEST_INVALID", "provider request could not be constructed", http.StatusInternalServerError, false, err)
 	}
 	httpRequest.Header.Set("Accept", "application/json")
-	httpRequest.Header.Set("User-Agent", "GreenRoute-provider-yandex/1.0")
+	httpRequest.Header.Set("User-Agent", "ProbokNet-provider-yandex/1.0")
 
 	httpResponse, err := a.client.Do(httpRequest)
 	if err != nil {
