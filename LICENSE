@@ -1,0 +1,80 @@
+Пробок.Нет — Proprietary Source-Available License
+Version 1.0, 2026
+
+Copyright (c) 2026 beztebya666 (nikivinn@gmail.com). All rights reserved.
+
+The source code in this repository is published so that it can be read,
+reviewed and learned from. It is NOT open-source software: no permission to
+use, copy, modify or distribute it is granted by the act of publication.
+
+
+1. GRANT
+
+Subject to the terms below, you are granted a personal, non-exclusive,
+non-transferable, revocable right to:
+
+  (a) view and read the source code;
+  (b) create a private local copy for the sole purpose of reading it;
+  (c) quote short excerpts for commentary, review, teaching or academic work,
+      with attribution to this repository.
+
+No other right is granted.
+
+
+2. RESTRICTIONS
+
+Without the prior written permission of the copyright holder, you may NOT:
+
+  (a) use this software or any part of it, in source or compiled form, for any
+      purpose, whether personal, academic, internal, commercial or otherwise;
+  (b) run it as a service, host it, or make its functionality available to any
+      third party;
+  (c) modify it, adapt it, translate it, or create derivative works from it;
+  (d) redistribute it, sublicense it, sell it, or include it in another work;
+  (e) train, fine-tune or evaluate a machine-learning model on it;
+  (f) remove or alter this notice or any copyright, attribution or licence
+      notice contained in the repository.
+
+Forking on a code-hosting platform for the purpose of proposing a contribution
+back to this repository is permitted. Any such contribution is licensed to the
+copyright holder under these same terms.
+
+
+3. PERMISSION REQUESTS
+
+Permission for any use not granted above is available on request. Write to
+nikivinn@gmail.com describing the intended use. Permission is granted only in
+writing, applies only to the use described, and may be withdrawn.
+
+
+4. THIRD-PARTY COMPONENTS
+
+This repository depends on third-party software distributed under its own
+licences, and calls third-party service APIs governed by their own contracts.
+Those licences and contracts apply to those components independently of this
+one. Nothing here grants any right in a third party's software, data, maps,
+traffic information or trademarks.
+
+
+5. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. ROUTE AND TRAFFIC
+ESTIMATES ARE ADVISORY AND MAY BE INCOMPLETE, STALE OR WRONG; THEY MUST NOT BE
+RELIED ON FOR SAFETY-CRITICAL DECISIONS.
+
+
+6. NO LIABILITY
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+7. TERMINATION
+
+Any breach of this licence terminates the rights granted in section 1
+immediately and automatically. On termination you must destroy all copies in
+your possession.
