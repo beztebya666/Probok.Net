@@ -159,6 +159,13 @@ func TestYandexAdapterDoesNotRetryPastBudget(t *testing.T) {
 	}
 }
 
+// withinCooldown accepts a wait that is at most the Retry-After value and no
+// more than a scheduling hiccup below it: the adapter sleeps the time still
+// remaining, which is measured against a real clock.
+func withinCooldown(slept, retryAfter time.Duration) bool {
+	return slept <= retryAfter && slept > retryAfter-50*time.Millisecond
+}
+
 func TestYandexAdapterHonorsRetryAfter(t *testing.T) {
 	fixture := readContractFixture(t)
 	calls := 0
@@ -185,7 +192,7 @@ func TestYandexAdapterHonorsRetryAfter(t *testing.T) {
 	if _, err := adapter.Routes(context.Background(), request); err != nil {
 		t.Fatal(err)
 	}
-	if slept != 3*time.Second {
+	if !withinCooldown(slept, 3*time.Second) {
 		t.Fatalf("slept %s, want Retry-After 3s", slept)
 	}
 	if metrics.provider429.Load() != 1 {

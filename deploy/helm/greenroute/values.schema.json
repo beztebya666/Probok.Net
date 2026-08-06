@@ -207,6 +207,8 @@
         "providerGeocoderBaseUrl": {"const": "https://geocode-maps.yandex.ru"},
         "yandexMaxResults": {"type": "integer", "minimum": 1, "maximum": 3},
         "yandexTrafficAvailable": {"type": "boolean"},
+        "adminEnabled": {"type": "boolean"},
+        "adminInMenu": {"type": "boolean"},
         "dgisRoutingBaseUrl": {"const": "https://routing.api.2gis.com"},
         "dgisMaxResults": {"type": "integer", "minimum": 1, "maximum": 3},
         "dgisRateLimitPerMinute": {"type": "integer", "minimum": 1, "maximum": 100000},

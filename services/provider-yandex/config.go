@@ -67,23 +67,23 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		Environment:                 environment,
-		HTTPAddr:                    envString("PROVIDER_ADDR", envString("HTTP_ADDR", ":8082")),
-		InternalAPIToken:            strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
-		ProviderMode:                strings.ToLower(envString("PROVIDER_MODE", providerModeYandex)),
-		AddressProviderMode:         strings.ToLower(envString("ADDRESS_PROVIDER_MODE", addressProviderAuto)),
-		YandexAPIKey:                firstNonEmptySecret("YANDEX_ROUTER_API_KEY", "YANDEX_API_KEY"),
-		YandexRouterBaseURL:         envString("YANDEX_ROUTER_BASE_URL", "https://api.routing.yandex.net"),
-		YandexGeocoderAPIKey:        firstNonEmptySecret("YANDEX_GEOCODER_API_KEY", "YANDEX_ROUTER_API_KEY", "YANDEX_API_KEY"),
-		YandexGeocoderBaseURL:       envString("YANDEX_GEOCODER_BASE_URL", "https://geocode-maps.yandex.ru"),
-		YandexMaxResults:            envInt("YANDEX_MAX_RESULTS", 3),
-		DGISAPIKey:                  firstNonEmptySecret("DGIS_API_KEY"),
-		DGISRoutingBaseURL:          envString("DGIS_ROUTING_BASE_URL", "https://routing.api.2gis.com"),
-		DGISMaxResults:              envInt("DGIS_MAX_RESULTS", 3),
+		Environment:           environment,
+		HTTPAddr:              envString("PROVIDER_ADDR", envString("HTTP_ADDR", ":8082")),
+		InternalAPIToken:      strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
+		ProviderMode:          strings.ToLower(envString("PROVIDER_MODE", providerModeYandex)),
+		AddressProviderMode:   strings.ToLower(envString("ADDRESS_PROVIDER_MODE", addressProviderAuto)),
+		YandexAPIKey:          firstNonEmptySecret("YANDEX_ROUTER_API_KEY", "YANDEX_API_KEY"),
+		YandexRouterBaseURL:   envString("YANDEX_ROUTER_BASE_URL", "https://api.routing.yandex.net"),
+		YandexGeocoderAPIKey:  firstNonEmptySecret("YANDEX_GEOCODER_API_KEY", "YANDEX_ROUTER_API_KEY", "YANDEX_API_KEY"),
+		YandexGeocoderBaseURL: envString("YANDEX_GEOCODER_BASE_URL", "https://geocode-maps.yandex.ru"),
+		YandexMaxResults:      envInt("YANDEX_MAX_RESULTS", 3),
+		DGISAPIKey:            firstNonEmptySecret("DGIS_API_KEY"),
+		DGISRoutingBaseURL:    envString("DGIS_ROUTING_BASE_URL", "https://routing.api.2gis.com"),
+		DGISMaxResults:        envInt("DGIS_MAX_RESULTS", 3),
 		// One green search issues the initial request plus up to five detour
 		// probes. A gate below that rejects the tail of every search and trips
 		// provider cooldowns for work the search legitimately intended to do.
-		DGISRateLimitPerMinute: envInt("DGIS_RATE_LIMIT_PER_MINUTE", 12),
+		DGISRateLimitPerMinute:      envInt("DGIS_RATE_LIMIT_PER_MINUTE", 12),
 		DGISMonthlyLimit:            envInt("DGIS_MONTHLY_LIMIT", 1000),
 		DGISGeocoderRatePerMinute:   envInt("DGIS_GEOCODER_RATE_LIMIT_PER_MINUTE", 600),
 		DGISGeocoderLocationBias:    envString("DGIS_GEOCODER_LOCATION_BIAS", defaultDGISGeocoderLocationBias),

@@ -204,7 +204,7 @@ func (e *engine) start(request domain.RouteSearchRequest, operationKey string) (
 		SearchID: searchID, RequestID: request.RequestID, Status: domain.SearchAccepted,
 		Alternatives: []domain.RouteCandidate{}, BestEffortRoutes: []domain.RouteCandidate{},
 		GreenTopRoutes: []domain.RouteCandidate{},
-		Warnings: []string{}, ScoringPolicyVersion: e.scoring.PolicyVersion,
+		Warnings:       []string{}, ScoringPolicyVersion: e.scoring.PolicyVersion,
 		Constraints: domain.AppliedConstraints{
 			MaxExtraDistanceMeters: request.MaxExtraDistanceMeters, MaxExtraDistancePercent: request.MaxExtraDistancePercent,
 			MaxExtraTimeSeconds: request.MaxExtraTimeSeconds, MinimumConfidenceScore: e.scoring.MinimumRouteConfidence,

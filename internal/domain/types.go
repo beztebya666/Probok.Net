@@ -182,12 +182,12 @@ type ProviderUsage struct {
 }
 
 type RouteSearchResult struct {
-	SearchID              string             `json:"searchId"`
-	RequestID             string             `json:"requestId"`
-	Status                SearchStatus       `json:"status"`
-	SelectedRoute         *RouteCandidate    `json:"selectedRoute,omitempty"`
-	Alternatives          []RouteCandidate   `json:"alternatives"`
-	BestEffortRoutes      []RouteCandidate   `json:"bestEffortRoutes"`
+	SearchID         string           `json:"searchId"`
+	RequestID        string           `json:"requestId"`
+	Status           SearchStatus     `json:"status"`
+	SelectedRoute    *RouteCandidate  `json:"selectedRoute,omitempty"`
+	Alternatives     []RouteCandidate `json:"alternatives"`
+	BestEffortRoutes []RouteCandidate `json:"bestEffortRoutes"`
 	// GreenTopRoutes is the proof-of-search ranking: the routes with the highest
 	// measured green share found during this search, in every routing mode and
 	// regardless of whether they satisfy the mode's hard constraints.

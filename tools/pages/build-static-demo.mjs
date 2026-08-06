@@ -16,7 +16,7 @@
  * Output lands in apps/web/out.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, renameSync, rmSync, mkdirSync, cpSync, writeFileSync } from "node:fs";
+import { existsSync, renameSync, rmSync, cpSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -84,8 +84,5 @@ writeFileSync(join(out, ".nojekyll"), "", "utf8");
 // there.
 const notFound = join(out, "404", "index.html");
 if (existsSync(notFound)) cpSync(notFound, join(out, "404.html"));
-
-mkdirSync(join(out, "media"), { recursive: true });
-cpSync(join(repoRoot, "docs", "media"), join(out, "media"), { recursive: true });
 
 console.log(`static demo built in ${out}${basePath ? ` for base path ${basePath}` : ""}`);

@@ -61,7 +61,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@1e60f620b9541d1c243d3c7b4bc99b512c1f756a # v4.0.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.15.0
           cache: npm

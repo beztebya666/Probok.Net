@@ -135,7 +135,9 @@ func TestYandexGeocoderHonorsRetryAfter(t *testing.T) {
 	if _, err := adapter.Suggest(context.Background(), "Тверская 1", "ru_RU", 1); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 || slept != 2*time.Second || metrics.provider429.Load() != 1 {
+	// The cooldown is waited out from the moment of the sleep, not of the 429,
+	// so the value is Retry-After minus however long the retry path took.
+	if calls != 2 || !withinCooldown(slept, 2*time.Second) || metrics.provider429.Load() != 1 {
 		t.Fatalf("calls=%d slept=%s rate_limited=%d", calls, slept, metrics.provider429.Load())
 	}
 }
