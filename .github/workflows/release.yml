@@ -289,15 +289,18 @@ jobs:
       - name: Push README and summary to Docker Hub
         if: env.DOCKERHUB_TOKEN != ''
         env:
-          SHORT_DESCRIPTION: "Маршрут не самый быстрый, а самый зелёный — объезд пробок по доле свободных участков"
+          # Hub counts bytes, not characters, and Cyrillic costs two each.
+          SHORT_DESCRIPTION: "Объезд пробок по доле свободных участков"
         run: |
           full=$(cat docs/dockerhub/README.md)
-          if [ "${#full}" -gt 25000 ]; then
-            echo "full description is ${#full} characters, Docker Hub allows 25000" >&2
+          full_bytes=$(wc -c < docs/dockerhub/README.md)
+          if [ "$full_bytes" -gt 25000 ]; then
+            echo "full description is $full_bytes bytes, Docker Hub allows 25000" >&2
             exit 1
           fi
-          if [ "${#SHORT_DESCRIPTION}" -gt 100 ]; then
-            echo "short description is ${#SHORT_DESCRIPTION} characters, Docker Hub allows 100" >&2
+          short_bytes=$(printf '%s' "$SHORT_DESCRIPTION" | wc -c)
+          if [ "$short_bytes" -gt 100 ]; then
+            echo "short description is $short_bytes bytes, Docker Hub allows 100" >&2
             exit 1
           fi
           jq -n --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_TOKEN" \

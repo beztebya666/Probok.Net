@@ -22,6 +22,7 @@ import {
   type RouteBookmark,
 } from "@/lib/route-bookmarks";
 import { loadDemoPreload } from "@/lib/demo-preload";
+import { seedDemoLists } from "@/lib/demo-seed";
 import { allSearchedRoutes } from "@/lib/route-insights";
 import { readRoutePreferences } from "@/lib/route-preferences";
 import { getRuntimeConfig } from "@/lib/runtime-config";
@@ -106,6 +107,10 @@ export function GreenRouteApp() {
     void loadDemoPreload(controller.signal).then((preload) => {
       if (!preload || controller.signal.aborted) return;
       setLastRequest(preload.request);
+      // Favourites, recent searches and saved analyses are features nobody can
+      // see when all three tabs are empty.
+      seedDemoLists(preload, safeLocalStorage(), Date.now());
+      setBookmarks(readRouteBookmarks(safeLocalStorage()));
       if (preload.origin && preload.destination) {
         setRouteLabel(`${preload.origin} → ${preload.destination}`);
         setDemoRoute({

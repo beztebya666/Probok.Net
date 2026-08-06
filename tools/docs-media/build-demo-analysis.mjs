@@ -70,6 +70,11 @@ const PATTERNS = [
   { green: 0.74, mix: ["ORANGE", "YELLOW", "RED", "ORANGE"] },
 ];
 
+// The reference route is the one a normal navigator would give: shortest, and
+// straight through the jam the green search exists to avoid. Its middle third
+// is solid red so the detour has something visible to be a detour from.
+const REFERENCE_PATTERN = { jamFrom: 0.3, jamTo: 0.68 };
+
 const RATIO = { GREEN: 1.02, YELLOW: 1.25, ORANGE: 1.55, RED: 2.1, UNKNOWN: 1.1 };
 
 function buildSegments(geometry, pattern, seed) {
@@ -111,8 +116,27 @@ function durationByClass(segments, congestionClass) {
     .reduce((sum, segment) => sum + segment.liveDurationSeconds, 0);
 }
 
+function buildReferenceSegments(geometry) {
+  const segments = buildSegments(geometry, { green: 1, mix: ["GREEN"] }, 3);
+  const first = Math.floor(segments.length * REFERENCE_PATTERN.jamFrom);
+  const last = Math.floor(segments.length * REFERENCE_PATTERN.jamTo);
+  return segments.map((segment, index) => {
+    if (index < first || index > last) return segment;
+    // Amber shoulders on either side of the standing traffic, as a jam looks.
+    const edge = index === first || index === last || index === first + 1 || index === last - 1;
+    const congestionClass = edge ? "ORANGE" : "RED";
+    const ratio = RATIO[congestionClass];
+    return {
+      ...segment,
+      congestionClass,
+      trafficRatio: ratio,
+      liveDurationSeconds: Math.round(segment.baselineDurationSeconds * ratio),
+    };
+  });
+}
+
 function buildCandidate(variant, route, pattern, index) {
-  const segments = buildSegments(route.geometry, pattern, 7 + index * 31);
+  const segments = variant.reference ? buildReferenceSegments(route.geometry) : buildSegments(route.geometry, pattern, 7 + index * 31);
   const liveDurationSeconds = segments.reduce((sum, segment) => sum + segment.liveDurationSeconds, 0);
   const baselineDurationSeconds = segments.reduce((sum, segment) => sum + segment.baselineDurationSeconds, 0);
   const greenSeconds = durationByClass(segments, "GREEN");
@@ -153,6 +177,18 @@ for (const [index, variant] of VARIANTS.entries()) {
   routes.push(buildCandidate(variant, route, PATTERNS[index], index));
   console.log(`${variant.id}: ${(route.distanceMeters / 1000).toFixed(1)} км, ${route.geometry.length} точек`);
 }
+
+// What a normal navigator would have suggested.
+const directRoute = await fetchRoute([ORIGIN, DESTINATION]);
+const reference = buildCandidate(
+  { id: "fastest-reference", label: "прямой путь через центр", reference: true },
+  directRoute,
+  PATTERNS[0],
+  3,
+);
+reference.reasonCodes = ["FASTEST_REFERENCE"];
+reference.explanation = "Самый короткий путь — через стоящий участок";
+console.log(`reference: ${(directRoute.distanceMeters / 1000).toFixed(1)} км, красного ${Math.round(reference.metrics.redDurationSeconds / 60)} мин`);
 routes.sort((a, b) => b.metrics.greenDurationSeconds / b.liveDurationSeconds - a.metrics.greenDurationSeconds / a.liveDurationSeconds);
 
 const generatedAt = "2026-08-06T09:41:12.000Z";
@@ -161,10 +197,10 @@ const result = {
   requestId: "3f2b7c14-8f1e-4c8a-9d02-6b5a1e77c410",
   status: "COMPLETED",
   selectedRoute: routes[0],
-  alternatives: routes.slice(1),
+  alternatives: [...routes.slice(1), reference],
   bestEffortRoutes: [],
   greenTopRoutes: routes,
-  fastestReferenceRoute: routes[routes.length - 1],
+  fastestReferenceRoute: reference,
   constraints: {
     maxExtraDistanceMeters: 150_000,
     maxExtraDistancePercent: 300,

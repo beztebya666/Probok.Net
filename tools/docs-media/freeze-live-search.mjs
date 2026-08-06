@@ -1,0 +1,91 @@
+/**
+ * Freezes one real search so the demo can show the product, not a mock-up.
+ *
+ * Runs the live stack through the browser exactly as a user would, waits for a
+ * terminal result, and writes the analysis with its request into the file the
+ * demo build ships. Nothing is synthesised: the geometry, the segment colours
+ * and the percentages are what the provider returned at the moment named in the
+ * file.
+ *
+ *   node tools/docs-media/freeze-live-search.mjs "<from>" "<to>" [mode]
+ *
+ * A green search spends up to eight objects of the 2GIS daily allowance, so run
+ * it deliberately.
+ */
+import { chromium } from "playwright-core";
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const BASE = process.env.FREEZE_BASE_URL ?? "http://localhost:3000";
+const [from, to, mode = "Свободнее"] = process.argv.slice(2);
+if (!from || !to) throw new Error('usage: freeze-live-search.mjs "<from>" "<to>" [mode]');
+
+const here = dirname(fileURLToPath(import.meta.url));
+const browser = await chromium.launch({ channel: "chromium" });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "ru-RU", timezoneId: "Europe/Moscow" });
+await context.addInitScript(() => {
+  window.localStorage.setItem("greenroute.traffic-provider.v1", JSON.stringify({ version: 1, provider: "2gis" }));
+});
+const page = await context.newPage();
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.locator('html[data-greenroute-hydrated="true"]').waitFor();
+await page.waitForTimeout(2500);
+
+async function pick(field, query) {
+  const input = page.getByRole("combobox", { name: field, exact: true });
+  await input.click();
+  await input.fill(query);
+  const option = page.getByRole("option").first();
+  await option.waitFor({ timeout: 20_000 });
+  await page.waitForTimeout(500);
+  const label = (await option.innerText()).split("\n")[0].trim();
+  await option.click();
+  return label;
+}
+
+const originLabel = await pick("Откуда", from);
+const destinationLabel = await pick("Куда", to);
+await page.getByText(mode, { exact: true }).click();
+// The widest allowance the UI offers: the point is to see the detour it finds.
+await page.locator(".advanced-settings > summary").click();
+const sliders = page.getByRole("slider");
+await sliders.nth(0).fill("150");
+await sliders.nth(1).fill("300");
+await page.locator(".advanced-settings > summary").click();
+
+await page.getByRole("button", { name: "Найти маршрут" }).click();
+await page.getByRole("heading", { name: "Варианты маршрута" }).waitFor({ timeout: 120_000 });
+await page.waitForTimeout(6000);
+
+const stored = await page.evaluate(() => window.localStorage.getItem("greenroute.last-result.v1"));
+if (!stored) throw new Error("the search produced no cached result");
+const cached = JSON.parse(stored);
+if (!cached.result?.greenTopRoutes?.length) throw new Error("the search returned no ranked routes");
+
+const payload = {
+  result: cached.result,
+  request: cached.request,
+  labels: { origin: originLabel, destination: destinationLabel },
+  capturedAt: cached.result.generatedAt,
+};
+const out = join(here, "..", "..", "apps", "web", "public", "demo", "analysis.json");
+writeFileSync(out, JSON.stringify(payload), "utf8");
+writeFileSync(join(here, "demo-analysis.json"), JSON.stringify(payload), "utf8");
+
+const summary = cached.result.greenTopRoutes.map((route) => {
+  const total = route.liveDurationSeconds;
+  const green = route.metrics?.greenDurationSeconds ?? 0;
+  const red = route.metrics?.redDurationSeconds ?? 0;
+  const orange = route.metrics?.orangeDurationSeconds ?? 0;
+  return {
+    id: route.candidateId,
+    greenPercent: Math.round((green / total) * 100),
+    minutes: Math.round(total / 60),
+    km: +(route.distanceMeters / 1000).toFixed(1),
+    redMinutes: Math.round(red / 60),
+    orangeMinutes: Math.round(orange / 60),
+  };
+});
+console.log(JSON.stringify({ origin: originLabel, destination: destinationLabel, capturedAt: payload.capturedAt, routes: summary }, null, 2));
+await browser.close();
