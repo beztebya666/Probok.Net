@@ -24,8 +24,7 @@ import {
 } from "@/lib/route-bookmarks";
 import { loadDemoPreload } from "@/lib/demo-preload";
 import { seedDemoLists } from "@/lib/demo-seed";
-import { allSearchedRoutes } from "@/lib/route-insights";
-import { readRoutePreferences } from "@/lib/route-preferences";
+import { readRoutePreferences, writeRoutePreferences } from "@/lib/route-preferences";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import type { RouteSearchRequest, RouteSearchResult, RoutingMode } from "@/lib/schemas";
 import { useRouteSearch } from "@/lib/use-route-search";
@@ -56,7 +55,9 @@ export function GreenRouteApp() {
   // Counts searches rather than flags one, so a second search re-announces the
   // demo instead of being swallowed by a toast that is already fading.
   const [demoNotices, setDemoNotices] = useState(0);
-  const [demoRoute, setDemoRoute] = useState<{ origin: LocationValue; destination: LocationValue } | undefined>(undefined);
+  // What the planner should show: set when an analysis is opened from a saved
+  // list, so the form matches the result on screen instead of sitting empty.
+  const [plannerRoute, setPlannerRoute] = useState<{ key: string; origin: LocationValue; destination: LocationValue } | undefined>(undefined);
   const [lastRequest, setLastRequest] = useState<RouteSearchRequest | undefined>(undefined);
   // While a bookmark is being refreshed we hold its previous content, so a
   // provider outage or an exhausted quota restores it instead of losing it.
@@ -67,16 +68,8 @@ export function GreenRouteApp() {
     routingMode?: RoutingMode | undefined;
     selectedCandidateId?: string | undefined;
   } | undefined>(undefined);
-  // A preview belongs to the search it was picked from, so it is stored with
-  // that search id and simply stops applying when a new search arrives.
-  const [preview, setPreview] = useState<{ searchId: string; candidateId: string } | undefined>(undefined);
   const busy = state.phase === "submitting" || state.phase === "searching";
   const searchId = state.result?.searchId;
-  const previewCandidateId = preview && preview.searchId === searchId ? preview.candidateId : undefined;
-  const previewRoute = useMemo(() => {
-    if (!state.result || !previewCandidateId) return undefined;
-    return allSearchedRoutes(state.result).find((route) => route.candidateId === previewCandidateId);
-  }, [state.result, previewCandidateId]);
 
   useEffect(() => {
     let active = true;
@@ -116,7 +109,8 @@ export function GreenRouteApp() {
       setTrafficProvider(readTrafficProvider(safeLocalStorage()));
       if (preload.origin && preload.destination) {
         setRouteLabel(`${preload.origin} → ${preload.destination}`);
-        setDemoRoute({
+        setPlannerRoute({
+          key: "demo",
           origin: { label: preload.origin, point: preload.request.origin },
           destination: { label: preload.destination, point: preload.request.destination },
         });
@@ -192,6 +186,32 @@ export function GreenRouteApp() {
    * first, so a provider error or an exhausted quota puts it back rather than
    * clearing the pane.
    */
+  /**
+   * Opening a saved analysis restores the whole search, not just its result:
+   * addresses, mode and allowances go back into the planner so the panel and
+   * the form describe the same trip.
+   */
+  const openBookmark = (bookmark: RouteBookmark) => {
+    restoreResult(bookmark.result, bookmark.routingMode, bookmark.selectedCandidateId);
+    const storage = safeLocalStorage();
+    const request = reconstructBookmarkRequest(bookmark, readRoutePreferences(storage));
+    if (!request) return;
+    setLastRequest(request);
+    writeRoutePreferences({
+      routingMode: request.routingMode,
+      extraDistanceKm: Math.round(request.maxExtraDistanceMeters / 1000),
+      extraTimeMinutes: Math.round(request.maxExtraTimeSeconds / 60),
+      avoidTolls: request.avoidTolls,
+      avoidUnpaved: request.avoidUnpaved,
+    }, storage);
+    const [origin = "", destination = ""] = bookmark.label.split("→").map((part) => part.trim());
+    setPlannerRoute({
+      key: `bookmark-${bookmark.id}`,
+      origin: { label: origin, point: request.origin },
+      destination: { label: destination, point: request.destination },
+    });
+  };
+
   const announceDemo = () => {
     if (config.demoMode) setDemoNotices((current) => current + 1);
   };
@@ -268,13 +288,13 @@ export function GreenRouteApp() {
           <RouteForm
             // The preload arrives after the first render, and initial state is
             // only read once; remounting is what makes it visible.
-            key={demoRoute ? "demo-route" : "blank"}
-            {...(demoRoute ? { initialRoute: demoRoute } : {})}
+            key={plannerRoute?.key ?? "blank"}
+            {...(plannerRoute ? { initialRoute: { origin: plannerRoute.origin, destination: plannerRoute.destination } } : {})}
             onSubmit={(request) => { setLastRequest(request); setRefreshing(undefined); announceDemo(); return start(request); }}
             onRouteLabelChange={setRouteLabel}
             bookmarks={bookmarks}
             activeSearchId={searchId}
-            onOpenBookmark={(bookmark) => restoreResult(bookmark.result, bookmark.routingMode, bookmark.selectedCandidateId)}
+            onOpenBookmark={openBookmark}
             onRemoveBookmark={(id) => persistBookmarks((current) => removeRouteBookmark(current, id))}
             busy={busy}
             configured={config.configured}
@@ -306,7 +326,6 @@ export function GreenRouteApp() {
           result={state.result}
           routingMode={state.routingMode}
           selectedRoute={selectedRoute}
-          previewRoute={previewRoute}
           trafficProvider={trafficProvider}
           onTrafficProviderChange={changeTrafficProvider}
           browserKey={config.yandexMapsBrowserKey}
@@ -329,12 +348,6 @@ export function GreenRouteApp() {
               onRefresh={canRefresh ? () => refreshCurrent() : undefined}
               refreshing={Boolean(refreshing)}
               onDismiss={reset}
-              previewCandidateId={previewCandidateId}
-              onPreview={(candidateId) => setPreview((current) =>
-                current?.searchId === searchId && current?.candidateId === candidateId
-                  ? undefined
-                  : searchId ? { searchId, candidateId } : undefined,
-              )}
             />
           </aside>
         )}

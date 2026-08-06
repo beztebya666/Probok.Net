@@ -287,7 +287,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -.02em; }
   gap: 12px;
   align-items: stretch;
 }
-.workspace-with-results { grid-template-columns: 340px minmax(400px, 1fr) 352px; }
+.workspace-with-results { grid-template-columns: 340px minmax(380px, 1fr) 344px; }
 
 .surface-panel, .glass-panel {
   min-width: 0;
@@ -1110,10 +1110,10 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 .eyebrow { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: var(--ink-3); font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .eyebrow svg { width: 13px; height: 13px; }
 .results-content { display: grid; gap: 12px; }
-/* The results panel is read, not copied: dragging across it used to select the
-   whole column. Numbers stay selectable, the labels around them do not. */
-.results-panel { user-select: none; -webkit-user-select: none; }
-.results-panel strong, .results-panel .route-green-share, .results-panel .flow-summary { user-select: text; -webkit-user-select: text; }
+/* Nothing in this interface is meant to be selected by dragging — it is an app,
+   not a document. Only the fields you type into are. */
+body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable="true"] { user-select: text; -webkit-user-select: text; }
 .results-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .results-heading h2 { margin: 0; font-size: 20px; line-height: 1.15; }
 .results-heading-actions { display: flex; flex: none; align-items: center; gap: 4px; }
@@ -1230,11 +1230,16 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 .confidence-medium > span { background: var(--flow-yellow); }
 .confidence-low > span { background: var(--flow-red); }
 
-.route-primary-metrics { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 6px; }
+/* As many metrics per row as fit: four in a wide panel, two by two in a narrow
+   one. The floor is what "1 ч 5 мин" needs — below it the values ran together. */
+.route-primary-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px 12px; }
+/* The dot occupies the same 16px slot as the other metric icons, or its column
+   starts a few pixels further right than the one above it. */
+.metric-dot { box-sizing: border-box; width: 16px; height: 16px; flex: none; padding: 3.5px; background-clip: content-box; border-radius: 50%; }
 .route-primary-metrics > div { display: flex; min-width: 0; align-items: center; gap: 6px; }
 .route-primary-metrics svg, .metric-symbol { width: 16px; flex: none; color: var(--ink-3); font-size: 14px; }
 .route-primary-metrics span:not(.metric-symbol) { display: grid; min-width: 0; }
-.route-primary-metrics strong { font-size: 14px; white-space: nowrap; }
+.route-primary-metrics strong { overflow: hidden; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
 .route-primary-metrics small { color: var(--ink-3); font-size: 7px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .route-flow-metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--ink-2); font-size: 9px; }
 .route-flow-metrics span { display: inline-flex; align-items: center; gap: 4px; }
@@ -1482,7 +1487,7 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 
 @media (max-width: 1260px) {
   .workspace { grid-template-columns: 320px minmax(380px, 1fr); }
-  .workspace-with-results { grid-template-columns: 320px minmax(360px, 1fr) 330px; }
+  .workspace-with-results { grid-template-columns: 320px minmax(340px, 1fr) 344px; }
   .planner-panel { padding: 16px; }
   .quota-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1491,7 +1496,7 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
    stacked band: the results stay beside the map instead of below the fold. */
 @media (max-width: 1160px) {
   .workspace { grid-template-columns: 296px minmax(320px, 1fr); }
-  .workspace-with-results { grid-template-columns: 296px minmax(300px, 1fr) 302px; }
+  .workspace-with-results { grid-template-columns: 296px minmax(280px, 1fr) 344px; }
   .planner-panel, .results-panel { padding: 14px; }
   .green-podium { padding: 10px; }
 }

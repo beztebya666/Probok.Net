@@ -8,7 +8,6 @@ import {
   findGreenest,
   formatDistance,
   formatDuration,
-  greenDistancePercent,
   displayedRoutes,
   greenTimePercent,
   isVerifiedAllGreenRoute,
@@ -52,8 +51,6 @@ function RouteCard({
   fastest,
   greenest,
   rank,
-  preview,
-  onPreview,
   onSelect,
 }: {
   route: RouteCandidate;
@@ -63,8 +60,6 @@ function RouteCard({
   greenest: boolean;
   // Position in the green ranking, which is what the list is sorted by.
   rank?: number | undefined;
-  preview?: boolean | undefined;
-  onPreview?: (() => void) | undefined;
   onSelect: () => void;
 }) {
   const { locale, t } = useLocale();
@@ -78,27 +73,15 @@ function RouteCard({
           {fastest && <span className="badge">{t("fastest")}</span>}
           {greenest && !recommended && <span className="badge badge-green">{t("greenest")}</span>}
         </div>
-        <span className={`confidence confidence-${route.confidence.level.toLowerCase()}`} title={`${t("confidence")}: ${Math.round(route.confidence.score * 100)}%`}>
-          <span aria-hidden="true" />{t(`confidence_${route.confidence.level}`)} · {Math.round(route.confidence.score * 100)}%
-        </span>
       </div>
-
-      {/* The ranking criterion, on the thing being ranked. */}
-      <button
-        type="button"
-        className={`route-green-share ${preview ? "is-active" : ""}`}
-        onClick={onPreview}
-        disabled={!onPreview}
-        title={onPreview ? t("showOnMap") : undefined}
-      >
-        <strong>{t("greenShareTime", { value: greenTimePercent(route) })}</strong>
-        <small>{t("greenShareDistance", { value: greenDistancePercent(route) })}</small>
-      </button>
 
       <div className="route-primary-metrics">
         <div><ClockIcon /><span><strong>{formatDuration(route.liveDurationSeconds, locale)}</strong><small>{t("eta")}</small></span></div>
         <div><span className="metric-symbol">↔</span><span><strong>{formatDistance(route.distanceMeters, locale)}</strong><small>{t("distance")}</small></span></div>
         <div><span className="metric-symbol">+ </span><span><strong>{formatDuration(route.trafficDelaySeconds, locale)}</strong><small>{t("delay")}</small></span></div>
+        {/* The ranking criterion belongs with the other numbers, not in a banner
+            above them. */}
+        <div><span className="metric-dot flow-green" aria-hidden="true" /><span><strong>{greenTimePercent(route)}%</strong><small>{t("greenShort")}</small></span></div>
       </div>
 	  <div className="route-flow-metrics" aria-label={t("congestionBreakdown")}>
 		<span><i className="flow-red" />{t("redDuration")}: <strong>{formatDuration(congestionSeconds(route, "RED"), locale)}</strong></span>
@@ -147,8 +130,6 @@ export function RouteResults({
   routingMode,
   selectedCandidateId,
   onSelect,
-  previewCandidateId,
-  onPreview,
   bookmarked,
   onSaveBookmark,
   onRefresh,
@@ -159,8 +140,6 @@ export function RouteResults({
   routingMode?: RoutingMode | undefined;
   selectedCandidateId?: string | undefined;
   onSelect: (candidateId: string) => void;
-  previewCandidateId?: string | undefined;
-  onPreview?: ((candidateId: string) => void) | undefined;
   bookmarked?: boolean | undefined;
   onSaveBookmark?: (() => void) | undefined;
   // Re-runs the same search so the measured-at moment becomes current.
@@ -263,8 +242,6 @@ export function RouteResults({
             fastest={route.candidateId === reference?.candidateId}
             greenest={route.candidateId === greenest?.candidateId}
             rank={index + 1}
-            preview={previewCandidateId === route.candidateId}
-            {...(onPreview ? { onPreview: () => onPreview(route.candidateId) } : {})}
             onSelect={() => onSelect(route.candidateId)}
           />
         ))}

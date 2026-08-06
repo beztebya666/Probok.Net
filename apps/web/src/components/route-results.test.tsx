@@ -24,14 +24,13 @@ const request: RouteSearchRequest = {
 };
 
 describe("RouteResults", () => {
-  it("renders recommendation, confidence and lets the user select an alternative", async () => {
+  it("renders the recommendation and lets the user select an alternative", async () => {
     createDemoSearch(request);
     const result = getDemoSearch(`demo-${request.requestId}`, true);
     const select = vi.fn();
     render(<LocaleProvider><RouteResults result={result} selectedCandidateId="route-green" onSelect={select} /></LocaleProvider>);
 
     expect(screen.getByText("Рекомендуем")).toBeInTheDocument();
-    expect(screen.getAllByText(/Высокая|Средняя/).length).toBeGreaterThan(0);
     const fastest = screen.getByTestId("route-card-route-fastest");
     await userEvent.click(within(fastest).getByRole("button", { name: /Выбрать/ }));
     expect(select).toHaveBeenCalledWith("route-fastest");
@@ -53,26 +52,21 @@ describe("RouteResults", () => {
     expect(screen.queryByTestId("route-card-route-fastest")).not.toBeInTheDocument();
   });
 
-  it("still lists what the search found when strict mode qualifies nothing", async () => {
+  it("still lists what the search found when strict mode qualifies nothing", () => {
     createDemoSearch(request);
     const result = getDemoSearch(`demo-${request.requestId}`, true);
     result.selectedRoute = null;
-    const preview = vi.fn();
 
     render(
       <LocaleProvider>
-        <RouteResults result={result} routingMode="STRICT_GREEN" onSelect={vi.fn()} onPreview={preview} />
+        <RouteResults result={result} routingMode="STRICT_GREEN" onSelect={vi.fn()} />
       </LocaleProvider>,
     );
 
     const cards = screen.getAllByTestId(/^route-card-/);
     expect(cards.length).toBeGreaterThan(0);
-    const share = cards[0]!.querySelector(".route-green-share");
-    expect(share).toHaveTextContent(/%\s*времени по зелёному/);
-
-    await userEvent.click(share as HTMLElement);
-    expect(preview).toHaveBeenCalledTimes(1);
-    expect(preview.mock.calls[0]![0]).toEqual(expect.any(String));
+    // The green share is a metric on the card now, next to time and distance.
+    expect(cards[0]!).toHaveTextContent(/\d+%/);
   });
 
   it("orders the routes by green share, best first, with the reference last", () => {
