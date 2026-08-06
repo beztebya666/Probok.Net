@@ -185,7 +185,11 @@ jobs:
               # same binary on any machine.
               CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build                 -trimpath -buildvcs=false -ldflags "-s -w"                 -o "dist/bin/$os-$arch/$name" "./services/$service"
             done
-            ( cd dist/bin && tar -czf "../probok-net-$VERSION-$os-$arch.tar.gz" "$os-$arch" )
+            if [ "$os" = windows ]; then
+              ( cd dist/bin && zip -qr "../probok-net_${VERSION}_${os}_${arch}.zip" "$os-$arch" )
+            else
+              ( cd dist/bin && tar -czf "../probok-net_${VERSION}_${os}_${arch}.tar.gz" "$os-$arch" )
+            fi
           done
           rm -rf dist/bin
       - name: Build the browser demo bundle
@@ -196,7 +200,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           node tools/pages/build-static-demo.mjs
-          ( cd apps/web && tar -czf "../../dist/probok-net-$VERSION-web-demo.tar.gz" out )
+          ( cd apps/web && tar -czf "../../dist/probok-net_${VERSION}_web-demo.tar.gz" out )
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: release-*
@@ -238,7 +242,7 @@ jobs:
             echo
             echo "Images are cosign-signed (keyless) and carry a provenance attestation."
           } > "$notes"
-          ( cd dist/sbom && zip -qr ../probok-net-$VERSION-sbom.zip . ) || true
+          ( cd dist/sbom && zip -qr "../probok-net_${VERSION}_sbom.zip" . )
           gh release create "$VERSION"             --title "Probok.Net $VERSION"             --notes-file "$notes"             dist/*.tar.gz dist/*.zip dist/SHA256SUMS.txt
 
   dockerhub-description:
