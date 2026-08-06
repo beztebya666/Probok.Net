@@ -77,7 +77,7 @@ NEXT_PUBLIC_2GIS_MAPGL_API_KEY=...  # отдельный браузерный к
 
 ## Проверка подписи
 
-Образы подписаны cosign (keyless) и снабжены provenance-аттестацией:
+Образы, собранные с доступным OIDC, подписаны cosign (keyless):
 
 ```bash
 cosign verify ghcr.io/beztebya666/probok.net/edge-api:latest \

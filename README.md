@@ -391,8 +391,8 @@ node tools/pages/build-static-demo.mjs
 ## Релизы и образы
 
 Тег `vX.Y.Z` запускает сборку: мультиплатформенные образы (`linux/amd64`, `linux/arm64`) уходят
-одним манифестом сразу в GitHub Packages и в Docker Hub, к ним добавляются подпись cosign,
-provenance-аттестация, CycloneDX SBOM и скан Trivy. В GitHub Release прикладываются бинарники
+одним манифестом сразу в GitHub Packages и в Docker Hub, к ним добавляются CycloneDX SBOM,
+скан Trivy и — когда runner может выпустить OIDC-токен — подпись cosign с provenance. В GitHub Release прикладываются бинарники
 сервисов под linux/darwin/windows (amd64 и arm64), статическая сборка демо и `SHA256SUMS.txt`.
 
 ```bash

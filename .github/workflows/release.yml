@@ -36,7 +36,8 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     strategy:
-      fail-fast: true
+      # One component failing must not cancel the others mid-publish.
+      fail-fast: false
       matrix:
         include:
           - component: edge-api
@@ -118,7 +119,10 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      # Supply-chain metadata is published when the runner can mint an OIDC
+      # token. It must not decide whether the image itself ships.
       - name: Attest build provenance
+        continue-on-error: true
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-name: ${{ steps.tags.outputs.image }}
@@ -126,6 +130,7 @@ jobs:
           push-to-registry: true
       - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Keyless sign exact manifest digest
+        continue-on-error: true
         env:
           IMAGE: ${{ steps.tags.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -244,7 +249,7 @@ jobs:
             echo "- CycloneDX SBOMs and the exact image digests;"
             echo "- \`SHA256SUMS.txt\`."
             echo
-            echo "Images are cosign-signed (keyless) and carry a provenance attestation."
+            echo "Where the runner could mint an OIDC token, images also carry a cosign signature and a provenance attestation."
           } > "$notes"
           ( cd dist/sbom && zip -qr "../probok-net_${VERSION}_sbom.zip" . )
           gh release create "$VERSION"             --title "Probok.Net $VERSION"             --notes-file "$notes"             dist/*.tar.gz dist/*.zip dist/SHA256SUMS.txt
