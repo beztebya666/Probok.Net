@@ -33,34 +33,47 @@ function metresBetween(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function trimStart(points, metres) {
-  let walked = 0;
-  for (let index = 1; index < points.length; index++) {
-    walked += metresBetween(points[index - 1], points[index]);
-    if (walked >= metres) return points.slice(index);
-  }
-  return points;
+function routeLength(points) {
+  let total = 0;
+  for (let index = 1; index < points.length; index++) total += metresBetween(points[index - 1], points[index]);
+  return total;
 }
 
-function trimEnds(points) {
-  const forward = trimStart(points, TRIM_METRES);
-  const backward = trimStart([...forward].reverse(), TRIM_METRES).reverse();
-  return backward.length >= 2 ? backward : points;
-}
-
+/**
+ * Removes the first and last few hundred metres of a route.
+ *
+ * Trimming has to follow the road, not the straight line between the ends: an
+ * earlier version kept only the segments lying near that line, which deleted
+ * exactly the parts a detour is made of and left the map full of holes. The
+ * measure here is distance walked along the route, so everything between the
+ * two trimmed ends survives untouched.
+ */
 function trimRoute(route) {
-  const geometry = trimEnds(route.geometry);
-  const first = geometry[0];
-  const last = geometry[geometry.length - 1];
-  const inside = (point) =>
-    metresBetween(point, first) + metresBetween(point, last) <=
-    metresBetween(first, last) + 2 * TRIM_METRES;
-  // A segment survives only if it still lies within the trimmed corridor; the
-  // ones covering the removed ends go with them.
-  const segments = route.segments
-    .map((segment) => ({ ...segment, geometry: segment.geometry.filter(inside) }))
-    .filter((segment) => segment.geometry.length >= 2);
-  return { ...route, geometry, segments };
+  const total = routeLength(route.geometry);
+  if (total <= 4 * TRIM_METRES) return route;
+
+  const kept = [];
+  let walked = 0;
+  for (let index = 0; index < route.segments.length; index++) {
+    const segment = route.segments[index];
+    const length = routeLength(segment.geometry);
+    const from = walked;
+    walked += length;
+    // Whole segments only: a segment is the unit the colours were measured on,
+    // and half of one would be a number nobody reported.
+    if (from >= TRIM_METRES && walked <= total - TRIM_METRES) kept.push(segment);
+  }
+  if (kept.length === 0) return route;
+
+  const geometry = kept.flatMap((segment, index) => (index === 0 ? segment.geometry : segment.geometry.slice(1)));
+  return {
+    ...route,
+    geometry,
+    segments: kept,
+    distanceMeters: Math.round(kept.reduce((sum, segment) => sum + segment.distanceMeters, 0)),
+    liveDurationSeconds: kept.reduce((sum, segment) => sum + segment.liveDurationSeconds, 0),
+    baselineDurationSeconds: kept.reduce((sum, segment) => sum + segment.baselineDurationSeconds, 0),
+  };
 }
 
 const entries = JSON.parse(readFileSync(input, "utf8")).entries ?? [];
