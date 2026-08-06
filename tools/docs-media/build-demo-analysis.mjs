@@ -197,8 +197,13 @@ const request = {
   searchDeadlineMs: 20_000,
 };
 
-const out = join(dirname(fileURLToPath(import.meta.url)), "demo-analysis.json");
-writeFileSync(out, JSON.stringify({ result, request }), "utf8");
+const labels = { origin: "Кутузовский проспект, 32", destination: "улица Академика Королёва, 12" };
+const payload = JSON.stringify({ result, request, labels });
+const here = dirname(fileURLToPath(import.meta.url));
+const out = join(here, "demo-analysis.json");
+writeFileSync(out, payload, "utf8");
+// The same analysis is what the browser demo opens with.
+writeFileSync(join(here, "..", "..", "apps", "web", "public", "demo", "analysis.json"), payload, "utf8");
 console.log(`→ ${out}`);
 for (const route of routes) {
   const share = Math.round((route.metrics.greenDurationSeconds / route.liveDurationSeconds) * 100);

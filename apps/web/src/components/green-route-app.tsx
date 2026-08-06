@@ -21,12 +21,14 @@ import {
   writeRouteBookmarks,
   type RouteBookmark,
 } from "@/lib/route-bookmarks";
+import { loadDemoPreload } from "@/lib/demo-preload";
 import { allSearchedRoutes } from "@/lib/route-insights";
 import { readRoutePreferences } from "@/lib/route-preferences";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import type { RouteSearchRequest, RouteSearchResult, RoutingMode } from "@/lib/schemas";
 import { useRouteSearch } from "@/lib/use-route-search";
 import { AlertIcon, InfoIcon } from "./icons";
+import type { LocationValue } from "./location-field";
 import { AppHeader } from "./app-header";
 import { DemoToast } from "./demo-toast";
 import { RouteForm } from "./route-form";
@@ -52,6 +54,7 @@ export function GreenRouteApp() {
   // Counts searches rather than flags one, so a second search re-announces the
   // demo instead of being swallowed by a toast that is already fading.
   const [demoNotices, setDemoNotices] = useState(0);
+  const [demoRoute, setDemoRoute] = useState<{ origin: LocationValue; destination: LocationValue } | undefined>(undefined);
   const [lastRequest, setLastRequest] = useState<RouteSearchRequest | undefined>(undefined);
   // While a bookmark is being refreshed we hold its previous content, so a
   // provider outage or an exhausted quota restores it instead of losing it.
@@ -94,6 +97,28 @@ export function GreenRouteApp() {
       window.removeEventListener("storage", syncStorage);
     };
   }, []);
+
+  // A demo that opens empty looks broken. The shipped analysis fills the first
+  // screen; a visitor who already searched something keeps their own result.
+  useEffect(() => {
+    if (!config.demoMode || state.result || state.phase !== "idle") return;
+    const controller = new AbortController();
+    void loadDemoPreload(controller.signal).then((preload) => {
+      if (!preload || controller.signal.aborted) return;
+      setLastRequest(preload.request);
+      if (preload.origin && preload.destination) {
+        setRouteLabel(`${preload.origin} → ${preload.destination}`);
+        setDemoRoute({
+          origin: { label: preload.origin, point: preload.request.origin },
+          destination: { label: preload.destination, point: preload.request.destination },
+        });
+      }
+      restoreResult(preload.result, preload.request.routingMode, preload.result.greenTopRoutes[0]?.candidateId);
+    });
+    return () => controller.abort();
+    // Runs once: after the first restore state.result is set and the guard holds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.demoMode]);
 
   useEffect(() => {
     let active = true;
@@ -233,6 +258,10 @@ export function GreenRouteApp() {
             </div>
           )}
           <RouteForm
+            // The preload arrives after the first render, and initial state is
+            // only read once; remounting is what makes it visible.
+            key={demoRoute ? "demo-route" : "blank"}
+            {...(demoRoute ? { initialRoute: demoRoute } : {})}
             onSubmit={(request) => { setLastRequest(request); setRefreshing(undefined); announceDemo(); return start(request); }}
             onRouteLabelChange={setRouteLabel}
             bookmarks={bookmarks}
@@ -276,6 +305,7 @@ export function GreenRouteApp() {
           twoGisBrowserKey={config.twoGisMapGLBrowserKey}
           twoGisDarkStyleId={config.twoGisMapGLDarkStyleId}
           yandexTrafficAvailable={config.yandexTrafficAvailable}
+            demoMode={config.demoMode}
         />
 
         {state.result && (

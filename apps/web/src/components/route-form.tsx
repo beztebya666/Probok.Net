@@ -48,6 +48,9 @@ type Props = {
   activeSearchId?: string | undefined;
   onOpenBookmark?: ((bookmark: RouteBookmark) => void) | undefined;
   onRemoveBookmark?: ((id: string) => void) | undefined;
+  // The demo build opens with a finished analysis; the planner should show the
+  // trip it belongs to instead of two blank fields.
+  initialRoute?: { origin: LocationValue; destination: LocationValue } | undefined;
 };
 
 function safeLocalStorage(): Storage | undefined {
@@ -68,10 +71,10 @@ function uuid(): string {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
-export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTrafficProviderChange, status, onRouteLabelChange, bookmarks, activeSearchId, onOpenBookmark, onRemoveBookmark }: Props) {
+export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTrafficProviderChange, status, onRouteLabelChange, bookmarks, activeSearchId, onOpenBookmark, onRemoveBookmark, initialRoute }: Props) {
   const { t } = useLocale();
-  const [origin, setOrigin] = useState<LocationValue>({ label: "" });
-  const [destination, setDestination] = useState<LocationValue>({ label: "" });
+  const [origin, setOrigin] = useState<LocationValue>(initialRoute?.origin ?? { label: "" });
+  const [destination, setDestination] = useState<LocationValue>(initialRoute?.destination ?? { label: "" });
   const [waypoints, setWaypoints] = useState<LocationValue[]>([]);
   const [mode, setMode] = useState<RoutingMode>(defaultRoutePreferences.routingMode);
   const [extraDistanceKm, setExtraDistanceKm] = useState(defaultRoutePreferences.extraDistanceKm);

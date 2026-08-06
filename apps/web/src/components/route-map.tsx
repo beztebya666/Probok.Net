@@ -436,6 +436,7 @@ type Props = {
   // 2GIS Style Editor and referenced by id.
   twoGisDarkStyleId?: string | undefined;
   yandexTrafficAvailable?: boolean | undefined;
+  demoMode?: boolean | undefined;
 };
 
 export function RouteMap({
@@ -449,6 +450,7 @@ export function RouteMap({
   twoGisBrowserKey,
   twoGisDarkStyleId,
   yandexTrafficAvailable = false,
+  demoMode = false,
 }: Props) {
   const { locale, t } = useLocale();
   const theme = useResolvedTheme();
@@ -814,7 +816,15 @@ export function RouteMap({
           <span className="map-status-dot" aria-hidden="true" />
           <span className="map-status-text">
             <strong>{status === "loading" ? t("mapLoading") : status === "error" ? t("mapError") : t("mapFallbackTitle")}</strong>
-            {status !== "loading" && <small>{status === "error" && activeRenderer === "2gis" ? labels.twoGisMapError : t("mapFallbackBody")}</small>}
+            {status !== "loading" && (
+              <small>
+                {status === "error" && activeRenderer === "2gis"
+                  ? labels.twoGisMapError
+                  /* The demo ships no key on purpose; "check your key" would read
+                     as a broken deployment rather than a deliberate one. */
+                  : demoMode ? t("mapFallbackDemo") : t("mapFallbackBody")}
+              </small>
+            )}
           </span>
           {status === "error" && <button type="button" className="map-retry" onClick={() => setRetryGeneration((generation) => generation + 1)}>{labels.retryMap}</button>}
         </div>
