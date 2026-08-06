@@ -95,11 +95,13 @@ await record("search", { width: 1280, height: 800, theme: "light", fps: 3 }, asy
   await page.waitForTimeout(3500);
 });
 
-// Clicking a rank previews that route on the map — the proof that the ranking
-// is three real routes and not three numbers.
+// Clicking a route's green share previews it on the map — the proof that the
+// ranking is real routes and not three numbers.
 await record("podium", { width: 1280, height: 800, theme: "light", restore: true, fps: 3 }, async (page) => {
-  for (const rank of [2, 3, 1]) {
-    await page.getByTestId(`green-rank-${rank}`).click();
+  const shares = page.locator(".route-green-share:not(:disabled)");
+  const count = Math.min(3, await shares.count());
+  for (const index of [1, 2, 0].filter((i) => i < count)) {
+    await shares.nth(index).click();
     await page.waitForTimeout(2200);
   }
 });
@@ -117,12 +119,18 @@ await record("theme", { width: 1280, height: 800, theme: "light", restore: true,
 // provider request at all.
 await record("bookmark", { width: 1280, height: 800, theme: "dark", restore: true, fps: 3 }, async (page) => {
   await page.waitForTimeout(700);
+  await page.getByTestId("preset-tab-bookmarks").click();
+  await page.waitForTimeout(1600);
+  const saved = page.locator(".route-bookmark-main").first();
+  if (await saved.count()) {
+    await saved.click();
+    await page.waitForTimeout(2000);
+  }
+  // The same control both saves and forgets, so the clip shows both.
   await page.locator(".results-bookmark").click();
   await page.waitForTimeout(1400);
-  await page.getByTestId("preset-tab-bookmarks").click();
+  await page.locator(".results-bookmark").click();
   await page.waitForTimeout(1800);
-  await page.locator(".route-bookmark-main").first().click();
-  await page.waitForTimeout(2200);
 });
 
 await browser.close();

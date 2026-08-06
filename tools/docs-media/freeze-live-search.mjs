@@ -28,6 +28,14 @@ await context.addInitScript(() => {
   window.localStorage.setItem("greenroute.traffic-provider.v1", JSON.stringify({ version: 1, provider: "2gis" }));
 });
 const page = await context.newPage();
+// The cached result does not always carry the request that produced it, and the
+// demo needs one to offer a refresh, so it is taken from the wire.
+let submitted;
+page.on("request", (request) => {
+  if (request.method() === "POST" && request.url().includes("/api/v1/route-searches")) {
+    try { submitted = JSON.parse(request.postData() ?? "null"); } catch { submitted = undefined; }
+  }
+});
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
 await page.locator('html[data-greenroute-hydrated="true"]').waitFor();
 await page.waitForTimeout(2500);
@@ -63,15 +71,24 @@ if (!stored) throw new Error("the search produced no cached result");
 const cached = JSON.parse(stored);
 if (!cached.result?.greenTopRoutes?.length) throw new Error("the search returned no ranked routes");
 
+// The wire body has no requestId — the edge API assigns one — while the client
+// schema requires it, so the result's own id fills the gap.
+const captured = cached.request ?? submitted;
+if (!captured) throw new Error("could not capture the request that produced this result");
+const request = captured.requestId ? captured : { ...captured, requestId: cached.result.requestId };
+if (!request.requestId) throw new Error("the captured request has no requestId");
 const payload = {
   result: cached.result,
-  request: cached.request,
+  request,
   labels: { origin: originLabel, destination: destinationLabel },
   capturedAt: cached.result.generatedAt,
 };
-const out = join(here, "..", "..", "apps", "web", "public", "demo", "analysis.json");
-writeFileSync(out, JSON.stringify(payload), "utf8");
-writeFileSync(join(here, "demo-analysis.json"), JSON.stringify(payload), "utf8");
+// Written relative to the repository root rather than to this file, so running
+// a copy of the script from anywhere still updates the fixture that ships.
+const repoRoot = process.env.PROBOK_ROOT ?? join(here, "..", "..");
+const payloadText = JSON.stringify(payload);
+writeFileSync(join(repoRoot, "apps", "web", "public", "demo", "analysis.json"), payloadText, "utf8");
+writeFileSync(join(repoRoot, "tools", "docs-media", "demo-analysis.json"), payloadText, "utf8");
 
 const summary = cached.result.greenTopRoutes.map((route) => {
   const total = route.liveDurationSeconds;
