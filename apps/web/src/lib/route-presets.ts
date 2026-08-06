@@ -6,7 +6,10 @@ export const ROUTE_PRESETS_VERSION = 1 as const;
 export const MAX_ROUTE_PRESETS = 12;
 export const TRAFFIC_PROVIDER_STORAGE_KEY = "greenroute.traffic-provider.v1";
 const MAX_STORED_BYTES = 96_000;
-const TrafficProviderSchema = z.enum(["off", "yandex", "2gis"]);
+// "osm" is a base map rather than a traffic source: OpenStreetMap has no
+// congestion layer. It sits in the same control because from the user's side
+// the question is one question — which map am I looking at.
+const TrafficProviderSchema = z.enum(["off", "yandex", "2gis", "osm"]);
 export type TrafficProvider = z.infer<typeof TrafficProviderSchema>;
 
 export type StoredLocation = {

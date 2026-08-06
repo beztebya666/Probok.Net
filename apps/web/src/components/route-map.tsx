@@ -472,6 +472,9 @@ export function RouteMap({
     onTrafficProviderChange?.(provider);
   };
   const activeRenderer: Exclude<TrafficRenderer, "yandex"> = trafficRenderer === "2gis" && twoGisBrowserKey ? "2gis" : "off";
+  // OpenStreetMap is shown when it is asked for and never as a silent
+  // substitute: a development build with a missing key must still say so.
+  const showOsm = trafficRenderer === "osm";
   const mapConfigured = activeRenderer === "2gis" ? Boolean(twoGisBrowserKey) : Boolean(browserKey);
   const routes = useMemo(() => result ? routeCandidatesForMode(result, routingMode) : [], [result, routingMode]);
   const strictSelected = routingMode === "STRICT_GREEN" && !isVerifiedAllGreenRoute(selectedRoute) ? undefined : selectedRoute;
@@ -492,6 +495,8 @@ export function RouteMap({
     trafficOff: "Выкл",
     trafficYandex: "Яндекс",
     trafficTwoGis: "2ГИС",
+    trafficOsm: "OSM",
+    trafficOsmHint: "Карта OpenStreetMap без слоя пробок",
     trafficYandexUnavailable: "Нужен платный тариф",
     trafficYandexError: "Не удалось включить пробки Яндекса",
     trafficTwoGisUnavailable: "Нужен ключ 2GIS MapGL",
@@ -508,6 +513,8 @@ export function RouteMap({
     trafficOff: "Off",
     trafficYandex: "Yandex",
     trafficTwoGis: "2GIS",
+    trafficOsm: "OSM",
+    trafficOsmHint: "OpenStreetMap base map, no traffic layer",
     trafficYandexUnavailable: "Paid plan required",
     trafficYandexError: "Yandex traffic could not be enabled",
     trafficTwoGisUnavailable: "2GIS MapGL key required",
@@ -744,17 +751,15 @@ export function RouteMap({
 
   return (
     <section ref={stageRef} className="map-stage" aria-label={t("mapRegion")}>
-      {/* Real streets from OpenStreetMap when there is no provider key; the
-          abstract grid only remains for the moment before the map has size. */}
-      {status === "ready" ? (
-        <SchematicMap routes={visibleRoutes} selectedRoute={visibleSelectedRoute} label={t("mapFallbackTitle")} hidden />
-      ) : (
+      {showOsm || status !== "ready" ? (
         <TileMap
           routes={visibleRoutes}
           selectedRoute={visibleSelectedRoute}
           segmentColor={segmentColor}
           label={t("mapFallbackTitle")}
         />
+      ) : (
+        <SchematicMap routes={visibleRoutes} selectedRoute={visibleSelectedRoute} label={t("mapFallbackTitle")} hidden />
       )}
       <div
         ref={containerRef}
@@ -796,6 +801,16 @@ export function RouteMap({
             {labels.trafficTwoGis}
             {!twoGisBrowserKey && <span className="traffic-renderer-reason" aria-hidden="true">{labels.trafficTwoGisUnavailable}</span>}
           </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={showOsm}
+            aria-label={`${labels.trafficOsm}. ${labels.trafficOsmHint}`}
+            title={labels.trafficOsmHint}
+            onClick={() => selectTrafficProvider("osm")}
+          >
+            {labels.trafficOsm}
+          </button>
         </div>
       </div>
       {trafficError && <div className="traffic-renderer-alert" role="status">{labels.trafficYandexError}</div>}
@@ -823,7 +838,8 @@ export function RouteMap({
       )}
       {geolocationState === "error" && <span className="sr-only" role="status">{labels.geolocationError}</span>}
 
-      {(status === "loading" || status === "error" || status === "fallback") && (
+      {/* Nothing to report while OpenStreetMap is the chosen map. */}
+      {(status === "loading" || status === "error" || status === "fallback") && !showOsm && (
         <div className={`map-status map-status-${status}`} role="status">
           <span className="map-status-dot" aria-hidden="true" />
           <span className="map-status-text">

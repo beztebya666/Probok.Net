@@ -1,6 +1,6 @@
 import type { DemoPreload } from "./demo-preload";
 import { readRouteBookmarks, writeRouteBookmarks, type RouteBookmark } from "./route-bookmarks";
-import { readRoutePresets, writeRoutePresets, type RoutePreset } from "./route-presets";
+import { readRoutePresets, readTrafficProvider, writeRoutePresets, writeTrafficProvider, type RoutePreset } from "./route-presets";
 
 /**
  * Fills the demo's saved lists so its features are visible rather than merely
@@ -17,6 +17,17 @@ export function seedDemoLists(preload: DemoPreload, storage: Storage | undefined
   if (!storage) return;
   seedPresets(preload, storage, now);
   seedBookmarks(preload, storage, now);
+  seedBaseMap(storage);
+}
+
+/**
+ * The demo ships no provider credential, so OpenStreetMap is the only map it
+ * can draw. Choosing it here rather than falling back to it inside the map
+ * keeps a development build honest: there a missing key still reports itself.
+ */
+function seedBaseMap(storage: Storage): void {
+  if (readTrafficProvider(storage) !== "off") return;
+  writeTrafficProvider("osm", storage);
 }
 
 function seedPresets(preload: DemoPreload, storage: Storage, now: number): void {

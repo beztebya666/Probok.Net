@@ -111,6 +111,7 @@ export function GreenRouteApp() {
       // see when all three tabs are empty.
       seedDemoLists(preload, safeLocalStorage(), Date.now());
       setBookmarks(readRouteBookmarks(safeLocalStorage()));
+      setTrafficProvider(readTrafficProvider(safeLocalStorage()));
       if (preload.origin && preload.destination) {
         setRouteLabel(`${preload.origin} → ${preload.destination}`);
         setDemoRoute({

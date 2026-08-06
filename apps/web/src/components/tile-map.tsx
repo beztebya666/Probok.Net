@@ -11,8 +11,8 @@ import type { GeoPoint, RouteCandidate } from "@/lib/schemas";
  * are OpenStreetMap raster tiles — no key, no account, attribution below — with
  * the route drawn on top in the same Web Mercator projection the tiles use.
  *
- * It is deliberately not a replacement for MapGL: no panning, no zooming, no
- * vector styling. It exists so a keyless build still shows real streets.
+ * It pans and zooms like a map should; what it is not is a vector map with a
+ * congestion layer, which is what the provider renderers are for.
  */
 const TILE_SIZE = 256;
 const TILE_HOST = "https://tile.openstreetmap.org";
@@ -30,6 +30,8 @@ function latToTileY(latitude: number, zoom: number): number {
 }
 
 type Viewport = { zoom: number; originX: number; originY: number };
+type Adjustment = { zoom: number; dx: number; dy: number };
+const ZERO: Adjustment = { zoom: 0, dx: 0, dy: 0 };
 
 function chooseViewport(points: GeoPoint[], width: number, height: number): Viewport {
   const usableWidth = Math.max(1, width - EDGE_PADDING * 2);
@@ -73,6 +75,12 @@ export function TileMap({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  // Panning and zooming are expressed relative to the fitted view, and tagged
+  // with the frame they belong to: when a new route refits the map the offset
+  // falls away by itself instead of dragging the old view along.
+  const [gesture, setGesture] = useState<{ frame: string; adjust: Adjustment }>({ frame: "", adjust: ZERO });
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
     const element = container.current;
@@ -91,10 +99,32 @@ export function TileMap({
     return all.length >= 2 ? all : [{ latitude: 55.68, longitude: 37.48 }, { latitude: 55.88, longitude: 37.75 }];
   }, [routes]);
 
-  const view = useMemo(
+  const fitted = useMemo(
     () => (size.width && size.height ? chooseViewport(points, size.width, size.height) : undefined),
     [points, size.width, size.height],
   );
+
+  const frame = fitted ? `${fitted.zoom}:${Math.round(fitted.originX)}:${Math.round(fitted.originY)}` : "";
+  const adjust = gesture.frame === frame ? gesture.adjust : ZERO;
+  const move = (change: (current: Adjustment) => Adjustment) =>
+    setGesture((current) => ({ frame, adjust: change(current.frame === frame ? current.adjust : ZERO) }));
+
+  const view = useMemo(() => {
+    if (!fitted) return undefined;
+    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fitted.zoom + adjust.zoom));
+    // Zooming keeps the centre of the viewport fixed, which is what a wheel over
+    // the middle of a map is expected to do.
+    const scale = 2 ** (zoom - fitted.zoom);
+    const centreX = (fitted.originX + size.width / 2) * scale;
+    const centreY = (fitted.originY + size.height / 2) * scale;
+    return {
+      zoom,
+      originX: centreX - size.width / 2 - adjust.dx,
+      originY: centreY - size.height / 2 - adjust.dy,
+    };
+  }, [fitted, adjust, size.width, size.height]);
+
+  const zoomBy = (delta: number) => move((current) => ({ ...current, zoom: current.zoom + delta }));
 
   const project = (point: GeoPoint): [number, number] => {
     if (!view) return [0, 0];
@@ -140,7 +170,35 @@ export function TileMap({
   const finish = selectedRoute?.geometry.at(-1);
 
   return (
-    <div className="tile-map" ref={container} role="img" aria-label={label} aria-hidden={hidden}>
+    <div
+      className={`tile-map${dragging ? " is-dragging" : ""}`}
+      ref={container}
+      role="img"
+      aria-label={label}
+      aria-hidden={hidden}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+        setDragging(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const active = drag.current;
+        if (!active || active.pointerId !== event.pointerId) return;
+        const dx = event.clientX - active.x;
+        const dy = event.clientY - active.y;
+        drag.current = { ...active, x: event.clientX, y: event.clientY };
+        move((current) => ({ ...current, dx: current.dx + dx, dy: current.dy + dy }));
+      }}
+      onPointerUp={(event) => {
+        if (drag.current?.pointerId !== event.pointerId) return;
+        drag.current = null;
+        setDragging(false);
+      }}
+      onPointerCancel={() => { drag.current = null; setDragging(false); }}
+      onWheel={(event) => zoomBy(event.deltaY < 0 ? 1 : -1)}
+      onDoubleClick={() => zoomBy(1)}
+    >
       <div className="tile-map-tiles" aria-hidden="true">
         {tiles.map((tile) => (
           // eslint-disable-next-line @next/next/no-img-element
@@ -174,6 +232,10 @@ export function TileMap({
           )}
         </svg>
       )}
+      <div className="tile-map-zoom">
+        <button type="button" onClick={() => zoomBy(1)} aria-label="+">+</button>
+        <button type="button" onClick={() => zoomBy(-1)} aria-label="−">&minus;</button>
+      </div>
       <a className="tile-map-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer noopener">
         © OpenStreetMap
       </a>
