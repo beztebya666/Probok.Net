@@ -1,0 +1,605 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GreenRoute Helm values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "global",
+    "images",
+    "serviceAccount",
+    "authProxy",
+    "services",
+    "config",
+    "secrets",
+    "migrations",
+    "ingress",
+    "autoscaling",
+    "podDisruptionBudget",
+    "topologySpreadConstraints",
+    "monitoring",
+    "networkPolicy",
+    "podSecurityContext",
+    "containerSecurityContext"
+  ],
+  "properties": {
+    "nameOverride": {"type": "string", "maxLength": 63},
+    "fullnameOverride": {"type": "string", "maxLength": 63},
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "imagePullSecrets", "revisionHistoryLimit", "terminationGracePeriodSeconds", "podAnnotations", "podLabels"],
+      "properties": {
+        "environment": {"type": "string", "enum": ["dev", "stage", "prod"]},
+        "imagePullSecrets": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"$ref": "#/definitions/localObjectReference"}
+        },
+        "revisionHistoryLimit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 10, "maximum": 300},
+        "podAnnotations": {"$ref": "#/definitions/stringMap"},
+        "podLabels": {"$ref": "#/definitions/stringMap"}
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edgeApi", "routingOrchestrator", "providerYandex", "web", "oauth2Proxy"],
+      "properties": {
+        "edgeApi": {"$ref": "#/definitions/image"},
+        "routingOrchestrator": {"$ref": "#/definitions/image"},
+        "providerYandex": {"$ref": "#/definitions/image"},
+        "web": {"$ref": "#/definitions/image"},
+        "oauth2Proxy": {"$ref": "#/definitions/image"}
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "name", "annotations"],
+      "properties": {
+        "create": {"type": "boolean"},
+        "name": {"type": "string", "maxLength": 253},
+        "annotations": {"$ref": "#/definitions/stringMap"}
+      }
+    },
+    "authProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "replicas", "image", "allowedEmailDomains", "cookieExpire", "cookieRefresh", "csrfExpire", "csrfCookiesPerRequestLimit", "resources"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicas": {"type": "integer", "minimum": 2, "maximum": 20},
+        "image": {"const": "oauth2Proxy"},
+        "allowedEmailDomains": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$"}
+        },
+        "cookieExpire": {"$ref": "#/definitions/duration"},
+        "cookieRefresh": {"$ref": "#/definitions/duration"},
+        "csrfExpire": {"$ref": "#/definitions/duration"},
+        "csrfCookiesPerRequestLimit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge-api", "routing-orchestrator", "provider-yandex", "web"],
+      "properties": {
+        "edge-api": {
+          "allOf": [
+            {"$ref": "#/definitions/service"},
+            {"properties": {"image": {"const": "edgeApi"}, "port": {"const": 8080}}}
+          ]
+        },
+        "routing-orchestrator": {
+          "allOf": [
+            {"$ref": "#/definitions/service"},
+            {"properties": {"image": {"const": "routingOrchestrator"}, "port": {"const": 8081}}}
+          ]
+        },
+        "provider-yandex": {
+          "allOf": [
+            {"$ref": "#/definitions/service"},
+            {"properties": {"image": {"const": "providerYandex"}, "port": {"const": 8082}}}
+          ]
+        },
+        "web": {
+          "allOf": [
+            {"$ref": "#/definitions/service"},
+            {"properties": {"image": {"const": "web"}, "port": {"const": 3000}}}
+          ]
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logLevel",
+        "edgePublicUrl",
+        "otelEndpoint",
+        "otelInsecure",
+        "corsAllowedOrigins",
+        "trustedProxyCIDRs",
+        "rateLimitIPPerMinute",
+        "rateLimitUserPerMinute",
+        "rateLimitSearchPerMinute",
+        "maxConcurrentEdgeRequests",
+        "maxConcurrentSSE",
+        "maxSSEPerPrincipal",
+        "sseMaxLifetime",
+        "sseIdleTimeout",
+        "idempotencyTTL",
+        "searchOwnershipTTL",
+        "edgeShutdownGracePeriod",
+        "auditRetention",
+        "auditPurgeInterval",
+        "oidcIssuerUrl",
+        "oidcClientId",
+        "oidcAdminGroup",
+        "providerMode",
+        "addressProviderMode",
+        "providerRouterBaseUrl",
+        "providerGeocoderBaseUrl",
+        "yandexMaxResults",
+        "yandexTrafficAvailable",
+        "dgisRoutingBaseUrl",
+        "dgisMaxResults",
+        "dgisRateLimitPerMinute",
+        "dgisMonthlyLimit",
+        "dgisGeocoderRateLimitPerMinute",
+        "dgisGeocoderLocationBias",
+        "providerRequestTimeout",
+        "providerConnectTimeout",
+        "providerResponseHeaderTimeout",
+        "providerBulkheadWaitTimeout",
+        "providerMaxRetries",
+        "providerRetryBaseDelay",
+        "providerRetryMaxDelay",
+        "providerMaxConcurrency",
+        "providerCircuitFailureThreshold",
+        "providerCircuitOpenDuration",
+        "providerShutdownTimeout",
+        "providerMaxRequestBodyBytes",
+        "providerMaxResponseBytes",
+        "providerCostPerBillableUnit",
+        "searchStateTTL",
+        "maxActiveCandidates",
+        "maxConcurrentSearches",
+        "maxEnhancedIterations",
+        "minimumScoreImprovement",
+        "sseHeartbeatInterval",
+        "orchestratorShutdownGracePeriod",
+        "features"
+      ],
+      "properties": {
+        "logLevel": {"type": "string", "enum": ["debug", "info", "warn", "error"]},
+        "edgePublicUrl": {"type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 2048},
+        "otelEndpoint": {"type": "string", "pattern": "^https?://[^\\s]+$", "maxLength": 2048},
+        "otelInsecure": {"type": "boolean"},
+        "corsAllowedOrigins": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "trustedProxyCIDRs": {"type": "string", "maxLength": 2048},
+        "rateLimitIPPerMinute": {"$ref": "#/definitions/rateLimit"},
+        "rateLimitUserPerMinute": {"$ref": "#/definitions/rateLimit"},
+        "rateLimitSearchPerMinute": {"$ref": "#/definitions/rateLimit"},
+        "maxConcurrentEdgeRequests": {"type": "integer", "minimum": 2, "maximum": 10000},
+        "maxConcurrentSSE": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "maxSSEPerPrincipal": {"type": "integer", "minimum": 1, "maximum": 20},
+        "sseMaxLifetime": {"$ref": "#/definitions/duration"},
+        "sseIdleTimeout": {"$ref": "#/definitions/duration"},
+        "idempotencyTTL": {"$ref": "#/definitions/duration"},
+        "searchOwnershipTTL": {"$ref": "#/definitions/duration"},
+        "edgeShutdownGracePeriod": {"$ref": "#/definitions/duration"},
+        "auditRetention": {"$ref": "#/definitions/duration"},
+        "auditPurgeInterval": {"$ref": "#/definitions/duration"},
+        "oidcIssuerUrl": {"type": "string", "pattern": "^https://[^\\s]+$", "maxLength": 2048},
+        "oidcClientId": {"type": "string", "minLength": 1, "maxLength": 255},
+        "oidcAdminGroup": {"type": "string", "minLength": 1, "maxLength": 255},
+        "providerMode": {"type": "string", "enum": ["stub", "yandex", "2gis"]},
+        "addressProviderMode": {"type": "string", "enum": ["auto", "yandex", "2gis"]},
+        "providerRouterBaseUrl": {"const": "https://api.routing.yandex.net"},
+        "providerGeocoderBaseUrl": {"const": "https://geocode-maps.yandex.ru"},
+        "yandexMaxResults": {"type": "integer", "minimum": 1, "maximum": 3},
+        "yandexTrafficAvailable": {"type": "boolean"},
+        "dgisRoutingBaseUrl": {"const": "https://routing.api.2gis.com"},
+        "dgisMaxResults": {"type": "integer", "minimum": 1, "maximum": 3},
+        "dgisRateLimitPerMinute": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "dgisMonthlyLimit": {"type": "integer", "minimum": 1, "maximum": 100000000},
+        "dgisGeocoderRateLimitPerMinute": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "dgisGeocoderLocationBias": {"type": "string", "pattern": "^-?(?:180(?:\\.0+)?|(?:1[0-7][0-9]|[1-9]?[0-9])(?:\\.[0-9]+)?),-?(?:90(?:\\.0+)?|(?:[1-8]?[0-9])(?:\\.[0-9]+)?)$", "maxLength": 64},
+        "providerRequestTimeout": {"$ref": "#/definitions/duration"},
+        "providerConnectTimeout": {"$ref": "#/definitions/duration"},
+        "providerResponseHeaderTimeout": {"$ref": "#/definitions/duration"},
+        "providerBulkheadWaitTimeout": {"$ref": "#/definitions/duration"},
+        "providerMaxRetries": {"type": "integer", "minimum": 0, "maximum": 5},
+        "providerRetryBaseDelay": {"$ref": "#/definitions/duration"},
+        "providerRetryMaxDelay": {"$ref": "#/definitions/duration"},
+        "providerMaxConcurrency": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "providerCircuitFailureThreshold": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "providerCircuitOpenDuration": {"$ref": "#/definitions/duration"},
+        "providerShutdownTimeout": {"$ref": "#/definitions/duration"},
+        "providerMaxRequestBodyBytes": {"type": "integer", "minimum": 1024, "maximum": 10485760},
+        "providerMaxResponseBytes": {"type": "integer", "minimum": 1024, "maximum": 134217728},
+        "providerCostPerBillableUnit": {"type": "number", "minimum": 0, "maximum": 1000000},
+        "searchStateTTL": {"$ref": "#/definitions/duration"},
+        "maxActiveCandidates": {"type": "integer", "minimum": 1, "maximum": 50},
+        "maxConcurrentSearches": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "maxEnhancedIterations": {"type": "integer", "minimum": 0, "maximum": 8},
+        "minimumScoreImprovement": {"type": "number", "minimum": 0, "maximum": 1},
+        "sseHeartbeatInterval": {"$ref": "#/definitions/duration"},
+        "orchestratorShutdownGracePeriod": {"$ref": "#/definitions/duration"},
+        "features": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enableEnhancedSearch",
+            "enableAvoidZoneGeneration",
+            "enableCorridorAnchors",
+            "enableRouteReranking",
+            "enableLiveRerouting",
+            "enableProviderCache",
+            "providerDataStorageAllowed",
+            "providerDataModificationAllowed",
+            "enableAnonymousUsage",
+            "enableAdminDebugDetails",
+            "allowExperimentalProviderSources"
+          ],
+          "properties": {
+            "enableEnhancedSearch": {"type": "boolean"},
+            "enableAvoidZoneGeneration": {"type": "boolean"},
+            "enableCorridorAnchors": {"type": "boolean"},
+            "enableRouteReranking": {"type": "boolean"},
+            "enableLiveRerouting": {"type": "boolean"},
+            "enableProviderCache": {"type": "boolean"},
+            "providerDataStorageAllowed": {"type": "boolean"},
+            "providerDataModificationAllowed": {"type": "boolean"},
+            "enableAnonymousUsage": {"type": "boolean"},
+            "enableAdminDebugDetails": {"type": "boolean"},
+            "allowExperimentalProviderSources": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "keys"],
+      "properties": {
+        "existingSecret": {"$ref": "#/definitions/dnsName"},
+        "keys": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["databaseUrl", "redisUrl", "oauth2RedisUrl", "yandexRouterApiKey", "yandexGeocoderApiKey", "dgisApiKey", "yandexMapsBrowserApiKey", "twoGisMapGLBrowserApiKey", "internalApiToken", "auditHashKey", "abuseHashKey", "abusePreviousHashKey", "oauth2ClientSecret", "oauth2CookieSecret"],
+          "properties": {
+            "databaseUrl": {"$ref": "#/definitions/secretKey"},
+            "redisUrl": {"$ref": "#/definitions/secretKey"},
+            "oauth2RedisUrl": {"$ref": "#/definitions/secretKey"},
+            "yandexRouterApiKey": {"$ref": "#/definitions/secretKey"},
+            "yandexGeocoderApiKey": {"$ref": "#/definitions/secretKey"},
+            "dgisApiKey": {"$ref": "#/definitions/secretKey"},
+            "yandexMapsBrowserApiKey": {"$ref": "#/definitions/secretKey"},
+            "twoGisMapGLBrowserApiKey": {"$ref": "#/definitions/secretKey"},
+            "internalApiToken": {"$ref": "#/definitions/secretKey"},
+            "auditHashKey": {"$ref": "#/definitions/secretKey"},
+            "abuseHashKey": {"$ref": "#/definitions/secretKey"},
+            "abusePreviousHashKey": {"$ref": "#/definitions/secretKey"},
+            "oauth2ClientSecret": {"$ref": "#/definitions/secretKey"},
+            "oauth2CookieSecret": {"$ref": "#/definitions/secretKey"}
+          }
+        }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "serviceAccountName", "backoffLimit", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "args"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "serviceAccountName": {"$ref": "#/definitions/dnsName"},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 10},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 60, "maximum": 604800},
+        "args": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"type": "string", "minLength": 1, "maxLength": 255}}
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "annotations", "host", "tls"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string", "minLength": 1, "maxLength": 253},
+        "annotations": {"$ref": "#/definitions/stringMap"},
+        "host": {"$ref": "#/definitions/hostname"},
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "secretName"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "secretName": {"$ref": "#/definitions/dnsName"}
+          }
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minReplicas", "maxReplicas", "targetCPUUtilizationPercentage", "targetMemoryUtilizationPercentage", "behavior"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minReplicas": {"type": "integer", "minimum": 1, "maximum": 100},
+        "maxReplicas": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "targetCPUUtilizationPercentage": {"type": "integer", "minimum": 1, "maximum": 100},
+        "targetMemoryUtilizationPercentage": {"type": "integer", "minimum": 1, "maximum": 100},
+        "behavior": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scaleUp", "scaleDown"],
+          "properties": {
+            "scaleUp": {"$ref": "#/definitions/scalingRules"},
+            "scaleDown": {"$ref": "#/definitions/scalingRules"}
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minAvailable": {"type": "integer", "minimum": 1, "maximum": 100}
+      }
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["maxSkew", "topologyKey", "whenUnsatisfiable"],
+        "properties": {
+          "maxSkew": {"type": "integer", "minimum": 1, "maximum": 100},
+          "topologyKey": {"type": "string", "minLength": 1, "maxLength": 317},
+          "whenUnsatisfiable": {"type": "string", "enum": ["DoNotSchedule", "ScheduleAnyway"]}
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceMonitor", "prometheusRule", "slo"],
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "interval", "scrapeTimeout", "labels"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "interval": {"$ref": "#/definitions/duration"},
+            "scrapeTimeout": {"$ref": "#/definitions/duration"},
+            "labels": {"$ref": "#/definitions/stringMap"}
+          }
+        },
+        "prometheusRule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "labels"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "labels": {"$ref": "#/definitions/stringMap"}
+          }
+        },
+        "slo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["availabilityTarget", "initialResponseSeconds", "enhancedSearchSeconds"],
+          "properties": {
+            "availabilityTarget": {"type": "number", "minimum": 0.9, "exclusiveMaximum": 1},
+            "initialResponseSeconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 300},
+            "enhancedSearchSeconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 3600}
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingressController", "monitoring", "observability", "databaseCIDRs", "redisCIDRs", "providerEgressCIDR", "identityEgressCIDR", "providerDeniedCIDRs"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressController": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector", "podSelector"],
+          "properties": {
+            "namespaceSelector": {"$ref": "#/definitions/labelSelector"},
+            "podSelector": {"$ref": "#/definitions/labelSelector"}
+          }
+        },
+        "monitoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector"],
+          "properties": {"namespaceSelector": {"$ref": "#/definitions/labelSelector"}}
+        },
+        "observability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector"],
+          "properties": {"namespaceSelector": {"$ref": "#/definitions/labelSelector"}}
+        },
+        "databaseCIDRs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/definitions/ipv4CIDR"}
+        },
+        "redisCIDRs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/definitions/ipv4CIDR"}
+        },
+        "providerEgressCIDR": {"$ref": "#/definitions/ipv4CIDR"},
+        "identityEgressCIDR": {"$ref": "#/definitions/ipv4CIDR"},
+        "providerDeniedCIDRs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"$ref": "#/definitions/ipv4CIDR"}
+        }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runAsNonRoot", "runAsUser", "runAsGroup", "fsGroup", "fsGroupChangePolicy", "seccompProfile"],
+      "properties": {
+        "runAsNonRoot": {"const": true},
+        "runAsUser": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "runAsGroup": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "fsGroup": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "fsGroupChangePolicy": {"type": "string", "enum": ["Always", "OnRootMismatch"]},
+        "seccompProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {"type": {"const": "RuntimeDefault"}}
+        }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem", "runAsNonRoot", "capabilities"],
+      "properties": {
+        "allowPrivilegeEscalation": {"const": false},
+        "readOnlyRootFilesystem": {"const": true},
+        "runAsNonRoot": {"const": true},
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["drop"],
+          "properties": {
+            "drop": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"const": "ALL"}}
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^[^\\s@]+$"},
+        "tag": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"const": "latest"}},
+        "digest": {"type": "string", "pattern": "^(?:|sha256:[a-f0-9]{64})$"},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "replicas", "autoscaling", "port", "health", "resources"],
+      "properties": {
+        "image": {"type": "string", "enum": ["edgeApi", "routingOrchestrator", "providerYandex", "web"]},
+        "replicas": {"type": "integer", "minimum": 1, "maximum": 100},
+        "autoscaling": {"type": "boolean"},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["livePath", "readyPath"],
+          "properties": {
+            "livePath": {"type": "string", "pattern": "^/", "maxLength": 256},
+            "readyPath": {"type": "string", "pattern": "^/", "maxLength": 256}
+          }
+        },
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": {"$ref": "#/definitions/resourcePair"},
+        "limits": {"$ref": "#/definitions/resourcePair"}
+      }
+    },
+    "resourcePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": {"type": "string", "minLength": 1, "maxLength": 32},
+        "memory": {"type": "string", "minLength": 1, "maxLength": 32}
+      }
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(?:\\.[0-9]+)?(?:ns|us|µs|ms|s|m|h)(?:[0-9]+(?:\\.[0-9]+)?(?:ns|us|µs|ms|s|m|h))*$",
+      "maxLength": 64
+    },
+    "rateLimit": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "secretKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+    "dnsName": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"},
+    "hostname": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$"},
+    "ipv4CIDR": {"type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$"},
+    "localObjectReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {"name": {"$ref": "#/definitions/dnsName"}}
+    },
+    "stringMap": {
+      "type": "object",
+      "propertyNames": {"type": "string", "minLength": 1, "maxLength": 317},
+      "additionalProperties": {"type": "string", "maxLength": 4096}
+    },
+    "labelSelector": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"type": "string", "minLength": 1, "maxLength": 317},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 63}
+    },
+    "scalingRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stabilizationWindowSeconds", "policies"],
+      "properties": {
+        "stabilizationWindowSeconds": {"type": "integer", "minimum": 0, "maximum": 3600},
+        "selectPolicy": {"type": "string", "enum": ["Max", "Min", "Disabled"]},
+        "policies": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "value", "periodSeconds"],
+            "properties": {
+              "type": {"type": "string", "enum": ["Percent", "Pods"]},
+              "value": {"type": "integer", "minimum": 1, "maximum": 10000},
+              "periodSeconds": {"type": "integer", "minimum": 1, "maximum": 1800}
+            }
+          }
+        }
+      }
+    }
+  }
+}

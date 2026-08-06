@@ -1,0 +1,41 @@
+global:
+  environment: dev
+
+authProxy:
+  enabled: false
+
+services:
+  edge-api:
+    replicas: 1
+  routing-orchestrator:
+    replicas: 1
+  provider-yandex:
+    replicas: 1
+  web:
+    replicas: 1
+
+config:
+  edgePublicUrl: http://localhost:3000
+  corsAllowedOrigins: http://localhost:3000
+  providerMode: stub
+  features:
+    enableAnonymousUsage: true
+    enableEnhancedSearch: true
+    enableAvoidZoneGeneration: true
+    enableCorridorAnchors: true
+    enableRouteReranking: true
+    enableLiveRerouting: false
+    enableProviderCache: false
+    providerDataStorageAllowed: false
+    providerDataModificationAllowed: false
+    enableAdminDebugDetails: false
+    allowExperimentalProviderSources: false
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false

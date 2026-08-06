@@ -1,0 +1,131 @@
+{{- if and .Values.ingress.enabled (not .Values.config.features.enableAnonymousUsage) (not .Values.authProxy.enabled) }}
+{{- fail "authProxy.enabled must be true when authenticated public ingress is enabled" }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+{{- if .Values.authProxy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+                port: {name: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "greenroute.fullname" . }}-api
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge-api
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/auth-url: {{ printf "http://%s-oauth2-proxy.%s.svc.cluster.local:4180/oauth2/auth" (include "greenroute.fullname" .) .Release.Namespace | quote }}
+    nginx.ingress.kubernetes.io/auth-response-headers: Authorization
+    nginx.ingress.kubernetes.io/auth-always-set-cookie: "true"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "greenroute.fullname" . }}-edge-api
+                port: {name: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "greenroute.fullname" . }}-web
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/auth-url: {{ printf "http://%s-oauth2-proxy.%s.svc.cluster.local:4180/oauth2/auth" (include "greenroute.fullname" .) .Release.Namespace | quote }}
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-always-set-cookie: "true"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "greenroute.fullname" . }}-web
+                port: {name: http}
+{{- else }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "greenroute.fullname" . }}
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "greenroute.fullname" . }}-edge-api
+                port: {name: http}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "greenroute.fullname" . }}-web
+                port: {name: http}
+{{- end }}
+{{- end }}

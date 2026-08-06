@@ -1,0 +1,33 @@
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go
+bin/
+coverage/
+*.coverprofile
+
+# JavaScript
+node_modules/
+.next/
+out/
+playwright-report/
+test-results/
+
+# Build and run artifacts
+artifacts/
+
+# Local state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+tmp/
+data/
+
+# Generated deployment material
+deploy/rendered/

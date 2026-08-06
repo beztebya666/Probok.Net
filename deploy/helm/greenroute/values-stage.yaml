@@ -1,0 +1,29 @@
+global:
+  environment: stage
+
+authProxy:
+  enabled: true
+
+config:
+  otelEndpoint: https://otel-collector.observability.svc.cluster.local:4318
+  otelInsecure: false
+  edgePublicUrl: https://stage.greenroute.example.com
+  corsAllowedOrigins: https://stage.greenroute.example.com
+  providerMode: yandex
+  features:
+    enableAnonymousUsage: false
+    enableProviderCache: false
+    providerDataStorageAllowed: false
+    providerDataModificationAllowed: false
+    enableAdminDebugDetails: false
+
+ingress:
+  enabled: true
+  host: stage.greenroute.example.com
+  tls:
+    enabled: true
+    secretName: greenroute-stage-tls
+
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 6

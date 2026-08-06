@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  external_labels:
+    environment: local
+    cluster: compose
+
+rule_files:
+  - /etc/prometheus/rules/*.yaml
+
+scrape_configs:
+  - job_name: edge-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: [edge-api:8080]
+        labels: {service: edge-api}
+  - job_name: routing-orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: [routing-orchestrator:8081]
+        labels: {service: routing-orchestrator}
+  - job_name: provider-yandex
+    metrics_path: /metrics
+    static_configs:
+      - targets: [provider-yandex:8082]
+        labels: {service: provider-yandex}
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:8888]
+  - job_name: otel-exported
+    static_configs:
+      - targets: [otel-collector:8889]
+  - job_name: prometheus
+    static_configs:
+      - targets: [prometheus:9090]

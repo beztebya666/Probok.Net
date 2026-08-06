@@ -1,0 +1,55 @@
+{
+  "response": {
+    "GeoObjectCollection": {
+      "metaDataProperty": {
+        "GeocoderResponseMetaData": {
+          "request": "synthetic address",
+          "results": "2",
+          "found": "2"
+        }
+      },
+      "featureMember": [
+        {
+          "GeoObject": {
+            "metaDataProperty": {
+              "GeocoderMetaData": {
+                "precision": "exact",
+                "text": "Россия, Москва, Тверская улица, 1",
+                "kind": "house",
+                "Address": {
+                  "formatted": "Москва, Тверская улица, 1"
+                }
+              }
+            },
+            "name": "Тверская улица, 1",
+            "description": "Москва, Россия",
+            "uri": "ymapsbm1://geo?data=synthetic-one",
+            "Point": {
+              "pos": "37.617635 55.755814"
+            }
+          }
+        },
+        {
+          "GeoObject": {
+            "metaDataProperty": {
+              "GeocoderMetaData": {
+                "precision": "number",
+                "text": "Россия, Москва, Тверская улица, 2",
+                "kind": "house",
+                "Address": {
+                  "formatted": "Москва, Тверская улица, 2"
+                }
+              }
+            },
+            "name": "Тверская улица, 2",
+            "description": "Москва, Россия",
+            "uri": "ymapsbm1://geo?data=synthetic-two",
+            "Point": {
+              "pos": "37.617901 55.756120"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{{- if .Values.monitoring.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "greenroute.fullname" . }}
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: greenroute.sli
+      interval: 30s
+      rules:
+        - record: greenroute:route_search_requests:rate5m
+          expr: sum(rate(route_search_total[5m]))
+        - record: greenroute:api_error_ratio:rate5m
+          expr: sum(rate(http_server_requests_total{route=~"/api/.*",status_code=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_total{route=~"/api/.*"}[5m])), 0.000001)
+        - record: greenroute:api_error_ratio:rate30m
+          expr: sum(rate(http_server_requests_total{route=~"/api/.*",status_code=~"5.."}[30m])) / clamp_min(sum(rate(http_server_requests_total{route=~"/api/.*"}[30m])), 0.000001)
+        - record: greenroute:api_error_ratio:rate1h
+          expr: sum(rate(http_server_requests_total{route=~"/api/.*",status_code=~"5.."}[1h])) / clamp_min(sum(rate(http_server_requests_total{route=~"/api/.*"}[1h])), 0.000001)
+        - record: greenroute:api_error_ratio:rate6h
+          expr: sum(rate(http_server_requests_total{route=~"/api/.*",status_code=~"5.."}[6h])) / clamp_min(sum(rate(http_server_requests_total{route=~"/api/.*"}[6h])), 0.000001)
+        - record: greenroute:initial_route_latency:p95_5m
+          expr: histogram_quantile(0.95, sum by (le) (rate(initial_candidates_duration_seconds_bucket[5m])))
+        - record: greenroute:enhanced_search_latency:p95_5m
+          expr: histogram_quantile(0.95, sum by (le) (rate(enhanced_search_duration_seconds_bucket[5m])))
+    - name: greenroute.alerts
+      interval: 30s
+      rules:
+        - alert: GreenRouteAPIErrorBudgetFastBurn
+          expr: greenroute:api_error_ratio:rate5m > (14.4 * (1 - {{ .Values.monitoring.slo.availabilityTarget }})) and greenroute:api_error_ratio:rate1h > (14.4 * (1 - {{ .Values.monitoring.slo.availabilityTarget }}))
+          for: 2m
+          labels: {severity: critical, service: edge-api, slo: availability}
+          annotations:
+            summary: API availability error budget is burning rapidly
+            description: Both 5m and 1h windows exceed the 14.4x burn threshold.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteAPIErrorBudgetSlowBurn
+          expr: greenroute:api_error_ratio:rate30m > (6 * (1 - {{ .Values.monitoring.slo.availabilityTarget }})) and greenroute:api_error_ratio:rate6h > (6 * (1 - {{ .Values.monitoring.slo.availabilityTarget }}))
+          for: 15m
+          labels: {severity: warning, service: edge-api, slo: availability}
+          annotations:
+            summary: API availability error budget is burning
+            description: Both 30m and 6h windows exceed the 6x burn threshold.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteInitialResponseSLOViolation
+          expr: greenroute:initial_route_latency:p95_5m > {{ .Values.monitoring.slo.initialResponseSeconds }}
+          for: 10m
+          labels: {severity: warning, service: routing-orchestrator, slo: initial-latency}
+          annotations:
+            summary: Initial route latency exceeds its SLO
+            description: Initial candidate p95 is above the configured objective for ten minutes.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteEnhancedSearchSLOViolation
+          expr: greenroute:enhanced_search_latency:p95_5m > {{ .Values.monitoring.slo.enhancedSearchSeconds }}
+          for: 10m
+          labels: {severity: warning, service: routing-orchestrator, slo: enhanced-latency}
+          annotations:
+            summary: Enhanced search latency exceeds its SLO
+            description: Enhanced search p95 is above the configured objective for ten minutes.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteProviderCircuitOpen
+          expr: max(provider_circuit_breaker_state) > 0
+          for: 2m
+          labels: {severity: critical, service: provider-yandex}
+          annotations:
+            summary: Provider circuit breaker is open
+            description: Route-provider calls are currently short-circuited.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteProviderRateLimited
+          expr: sum(rate(provider_429_total[5m])) > 0.1
+          for: 5m
+          labels: {severity: warning, service: provider-yandex}
+          annotations:
+            summary: Provider throttling is elevated
+            description: Provider 429 responses exceed 0.1 requests per second.
+            runbook_url: docs/runbooks/provider-rate-limit.md
+        - alert: GreenRouteSearchBudgetExhaustionHigh
+          expr: sum(rate(search_budget_exhausted_total[10m])) / clamp_min(sum(rate(route_search_total[10m])), 0.000001) > 0.05
+          for: 15m
+          labels: {severity: warning, service: routing-orchestrator}
+          annotations:
+            summary: Search budgets are frequently exhausted
+            description: More than 5% of searches exhaust their provider-call budget.
+            runbook_url: docs/runbooks/provider-rate-limit.md
+        - alert: GreenRouteLowConfidenceResultsHigh
+          expr: sum(rate(low_confidence_results_total[15m])) / clamp_min(sum(rate(route_search_total[15m])), 0.000001) > 0.1
+          for: 20m
+          labels: {severity: warning, service: routing-orchestrator}
+          annotations:
+            summary: Low-confidence result ratio is elevated
+            description: More than 10% of searches yield low-confidence results.
+            runbook_url: docs/runbooks/provider-outage.md
+        - alert: GreenRouteNoTelemetry
+          expr: absent(up{service="edge-api"} == 1)
+          for: 5m
+          labels: {severity: critical, service: observability}
+          annotations:
+            summary: Edge API telemetry is absent
+            description: Prometheus cannot scrape edge-api, so availability measurement is blind.
+            runbook_url: docs/runbooks/disaster-recovery.md
+        {{- if .Values.authProxy.enabled }}
+        - alert: GreenRouteAuthenticationGatewayUnavailable
+          expr: absent(up{service="oauth2-proxy"} == 1)
+          for: 2m
+          labels: {severity: critical, service: oauth2-proxy}
+          annotations:
+            summary: Authentication gateway is unavailable
+            description: No OAuth2 Proxy target is healthy; protected web and API access fails closed.
+            runbook_url: docs/runbooks/authentication-outage.md
+        {{- end }}
+{{- end }}

@@ -1,0 +1,104 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 384
+    spike_limit_mib: 96
+  attributes/privacy:
+    actions:
+      - key: route.origin
+        action: delete
+      - key: route.destination
+        action: delete
+      - key: route.waypoints
+        action: delete
+      - key: geo.latitude
+        action: delete
+      - key: geo.longitude
+        action: delete
+      - key: http.request.body
+        action: delete
+      - key: http.response.body
+        action: delete
+      - key: yandex.api_key
+        action: delete
+      - key: db.statement
+        action: delete
+      # Defense in depth: auto-instrumentation must never export location
+      # search parameters or client network identifiers.
+      - key: url.full
+        action: delete
+      - key: url.query
+        action: delete
+      - key: url.path
+        action: delete
+      - key: http.url
+        action: delete
+      - key: http.target
+        action: delete
+      - key: client.address
+        action: delete
+      - key: network.peer.address
+        action: delete
+      - key: network.local.address
+        action: delete
+  resource:
+    attributes:
+      - key: service.namespace
+        value: greenroute
+        action: upsert
+  batch:
+    send_batch_size: 1024
+    timeout: 2s
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: greenroute
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/privacy, resource, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/privacy, resource, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/privacy, resource, batch]
+      exporters: [otlphttp/loki]

@@ -1,0 +1,55 @@
+name: Pages
+
+# Publishes the browser demo. It is a static export in demo mode: every search
+# is answered from fixtures inside the page, so the site holds no credentials
+# and reaches no provider.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "docs/media/**"
+      - "tools/pages/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Build the static demo
+        env:
+          # A project site is served from /<repo>/, so every asset needs that prefix.
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+        run: node tools/pages/build-static-demo.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

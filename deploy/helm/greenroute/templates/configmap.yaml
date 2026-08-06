@@ -1,0 +1,82 @@
+{{- include "greenroute.validateValues" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "greenroute.fullname" . }}-config
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ ternary "production" .Values.global.environment (eq .Values.global.environment "prod") | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  ORCHESTRATOR_URL: {{ printf "http://%s-routing-orchestrator:8081" (include "greenroute.fullname" .) | quote }}
+  PROVIDER_URL: {{ printf "http://%s-provider-yandex:8082" (include "greenroute.fullname" .) | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+  OTEL_EXPORTER_OTLP_INSECURE: {{ .Values.config.otelInsecure | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ printf "deployment.environment=%s,service.namespace=greenroute" .Values.global.environment | quote }}
+  CORS_ALLOWED_ORIGINS: {{ .Values.config.corsAllowedOrigins | quote }}
+  TRUSTED_PROXY_CIDRS: {{ .Values.config.trustedProxyCIDRs | quote }}
+  RATE_LIMIT_IP_PER_MINUTE: {{ .Values.config.rateLimitIPPerMinute | quote }}
+  RATE_LIMIT_USER_PER_MINUTE: {{ .Values.config.rateLimitUserPerMinute | quote }}
+  RATE_LIMIT_SEARCH_PER_MINUTE: {{ .Values.config.rateLimitSearchPerMinute | quote }}
+  MAX_CONCURRENT_EDGE_REQUESTS: {{ .Values.config.maxConcurrentEdgeRequests | quote }}
+  MAX_CONCURRENT_SSE: {{ .Values.config.maxConcurrentSSE | quote }}
+  MAX_SSE_PER_PRINCIPAL: {{ .Values.config.maxSSEPerPrincipal | quote }}
+  SSE_MAX_LIFETIME: {{ .Values.config.sseMaxLifetime | quote }}
+  SSE_IDLE_TIMEOUT: {{ .Values.config.sseIdleTimeout | quote }}
+  IDEMPOTENCY_TTL: {{ .Values.config.idempotencyTTL | quote }}
+  SEARCH_OWNERSHIP_TTL: {{ .Values.config.searchOwnershipTTL | quote }}
+  AUDIT_RETENTION: {{ .Values.config.auditRetention | quote }}
+  AUDIT_PURGE_INTERVAL: {{ .Values.config.auditPurgeInterval | quote }}
+  OIDC_ISSUER_URL: {{ .Values.config.oidcIssuerUrl | quote }}
+  OIDC_CLIENT_ID: {{ .Values.config.oidcClientId | quote }}
+  OIDC_ADMIN_GROUP: {{ .Values.config.oidcAdminGroup | quote }}
+  PROVIDER_MODE: {{ .Values.config.providerMode | quote }}
+  ADDRESS_PROVIDER_MODE: {{ .Values.config.addressProviderMode | quote }}
+  GREENROUTE_PROVIDER_MODE: {{ .Values.config.providerMode | quote }}
+  GREENROUTE_ADDRESS_PROVIDER_MODE: {{ .Values.config.addressProviderMode | quote }}
+  GREENROUTE_YANDEX_TRAFFIC_AVAILABLE: {{ .Values.config.yandexTrafficAvailable | quote }}
+  GREENROUTE_ADMIN_ENABLED: {{ .Values.config.adminEnabled | default false | quote }}
+  GREENROUTE_ADMIN_IN_MENU: {{ .Values.config.adminInMenu | default false | quote }}
+  YANDEX_ROUTER_BASE_URL: {{ .Values.config.providerRouterBaseUrl | quote }}
+  YANDEX_GEOCODER_BASE_URL: {{ .Values.config.providerGeocoderBaseUrl | quote }}
+  YANDEX_MAX_RESULTS: {{ .Values.config.yandexMaxResults | quote }}
+  DGIS_ROUTING_BASE_URL: {{ .Values.config.dgisRoutingBaseUrl | quote }}
+  DGIS_MAX_RESULTS: {{ .Values.config.dgisMaxResults | quote }}
+  DGIS_RATE_LIMIT_PER_MINUTE: {{ .Values.config.dgisRateLimitPerMinute | quote }}
+  DGIS_MONTHLY_LIMIT: {{ .Values.config.dgisMonthlyLimit | quote }}
+  DGIS_GEOCODER_RATE_LIMIT_PER_MINUTE: {{ .Values.config.dgisGeocoderRateLimitPerMinute | quote }}
+  DGIS_GEOCODER_LOCATION_BIAS: {{ .Values.config.dgisGeocoderLocationBias | quote }}
+  PROVIDER_REQUEST_TIMEOUT: {{ .Values.config.providerRequestTimeout | quote }}
+  PROVIDER_CONNECT_TIMEOUT: {{ .Values.config.providerConnectTimeout | quote }}
+  PROVIDER_RESPONSE_HEADER_TIMEOUT: {{ .Values.config.providerResponseHeaderTimeout | quote }}
+  PROVIDER_BULKHEAD_WAIT_TIMEOUT: {{ .Values.config.providerBulkheadWaitTimeout | quote }}
+  PROVIDER_MAX_RETRIES: {{ .Values.config.providerMaxRetries | quote }}
+  PROVIDER_RETRY_BASE_DELAY: {{ .Values.config.providerRetryBaseDelay | quote }}
+  PROVIDER_RETRY_MAX_DELAY: {{ .Values.config.providerRetryMaxDelay | quote }}
+  PROVIDER_MAX_CONCURRENCY: {{ .Values.config.providerMaxConcurrency | quote }}
+  PROVIDER_CB_FAILURE_THRESHOLD: {{ .Values.config.providerCircuitFailureThreshold | quote }}
+  PROVIDER_CB_OPEN_DURATION: {{ .Values.config.providerCircuitOpenDuration | quote }}
+  PROVIDER_SHUTDOWN_TIMEOUT: {{ .Values.config.providerShutdownTimeout | quote }}
+  PROVIDER_MAX_REQUEST_BODY_BYTES: {{ .Values.config.providerMaxRequestBodyBytes | int64 | quote }}
+  PROVIDER_MAX_RESPONSE_BYTES: {{ .Values.config.providerMaxResponseBytes | int64 | quote }}
+  PROVIDER_COST_PER_BILLABLE_UNIT: {{ .Values.config.providerCostPerBillableUnit | quote }}
+  SEARCH_STATE_TTL: {{ .Values.config.searchStateTTL | quote }}
+  MAX_ACTIVE_CANDIDATES: {{ .Values.config.maxActiveCandidates | quote }}
+  MAX_CONCURRENT_SEARCHES: {{ .Values.config.maxConcurrentSearches | quote }}
+  MAX_ENHANCED_ITERATIONS: {{ .Values.config.maxEnhancedIterations | quote }}
+  MINIMUM_SCORE_IMPROVEMENT: {{ .Values.config.minimumScoreImprovement | quote }}
+  SSE_HEARTBEAT_INTERVAL: {{ .Values.config.sseHeartbeatInterval | quote }}
+  NEXT_PUBLIC_EDGE_API_BASE_URL: {{ .Values.config.edgePublicUrl | quote }}
+  NEXT_PUBLIC_DEMO_MODE: "false"
+  ENABLE_ENHANCED_SEARCH: {{ .Values.config.features.enableEnhancedSearch | quote }}
+  ENABLE_AVOID_ZONE_GENERATION: {{ .Values.config.features.enableAvoidZoneGeneration | quote }}
+  ENABLE_CORRIDOR_ANCHORS: {{ .Values.config.features.enableCorridorAnchors | quote }}
+  ENABLE_ROUTE_RERANKING: {{ .Values.config.features.enableRouteReranking | quote }}
+  ENABLE_LIVE_REROUTING: {{ .Values.config.features.enableLiveRerouting | quote }}
+  ENABLE_PROVIDER_CACHE: {{ .Values.config.features.enableProviderCache | quote }}
+  PROVIDER_DATA_STORAGE_ALLOWED: {{ .Values.config.features.providerDataStorageAllowed | quote }}
+  PROVIDER_DATA_MODIFICATION_ALLOWED: {{ .Values.config.features.providerDataModificationAllowed | quote }}
+  ENABLE_ANONYMOUS_USAGE: {{ .Values.config.features.enableAnonymousUsage | quote }}
+  ENABLE_ADMIN_DEBUG_DETAILS: {{ .Values.config.features.enableAdminDebugDetails | quote }}
+  ALLOW_EXPERIMENTAL_PROVIDER_SOURCES: {{ .Values.config.features.allowExperimentalProviderSources | quote }}

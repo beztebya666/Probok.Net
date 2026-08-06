@@ -1,0 +1,308 @@
+global:
+  environment: dev
+  imagePullSecrets: []
+  revisionHistoryLimit: 3
+  terminationGracePeriodSeconds: 35
+  podAnnotations: {}
+  podLabels: {}
+
+images:
+  edgeApi:
+    repository: ghcr.io/greenroute/edge-api
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  routingOrchestrator:
+    repository: ghcr.io/greenroute/routing-orchestrator
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  providerYandex:
+    repository: ghcr.io/greenroute/provider-yandex
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  web:
+    repository: ghcr.io/greenroute/web
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  oauth2Proxy:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: "v7.15.3"
+    digest: "sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561"
+    pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+authProxy:
+  enabled: false
+  replicas: 2
+  image: oauth2Proxy
+  # Non-routable fail-closed sentinel; protected releases must set an approved domain.
+  allowedEmailDomains: [invalid.invalid]
+  cookieExpire: 1h
+  cookieRefresh: 5m
+  csrfExpire: 5m
+  csrfCookiesPerRequestLimit: 5
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+services:
+  edge-api:
+    image: edgeApi
+    replicas: 2
+    autoscaling: true
+    port: 8080
+    health:
+      livePath: /health/live
+      readyPath: /health/ready
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+  routing-orchestrator:
+    image: routingOrchestrator
+    replicas: 1
+    autoscaling: false
+    port: 8081
+    health:
+      livePath: /health/live
+      readyPath: /health/ready
+    resources:
+      requests: {cpu: 200m, memory: 192Mi}
+      limits: {cpu: 1500m, memory: 768Mi}
+  provider-yandex:
+    image: providerYandex
+    replicas: 2
+    autoscaling: true
+    port: 8082
+    health:
+      livePath: /health/live
+      readyPath: /health/ready
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 750m, memory: 384Mi}
+  web:
+    image: web
+    replicas: 2
+    autoscaling: true
+    port: 3000
+    health:
+      livePath: /api/health
+      readyPath: /api/health
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 750m, memory: 512Mi}
+
+config:
+  logLevel: info
+  edgePublicUrl: https://greenroute.example.com
+  otelEndpoint: http://otel-collector.observability.svc.cluster.local:4318
+  otelInsecure: true
+  corsAllowedOrigins: https://greenroute.example.com
+  # Fail-closed sentinel. A protected release must replace this with the exact
+  # ingress-controller source CIDRs; never broaden it to every private peer.
+  trustedProxyCIDRs: 127.0.0.1/32
+  rateLimitIPPerMinute: 60
+  rateLimitUserPerMinute: 120
+  rateLimitSearchPerMinute: 12
+  maxConcurrentEdgeRequests: 256
+  maxConcurrentSSE: 64
+  maxSSEPerPrincipal: 3
+  sseMaxLifetime: 30m
+  sseIdleTimeout: 45s
+  idempotencyTTL: 15m
+  searchOwnershipTTL: 30m
+  edgeShutdownGracePeriod: 20s
+  auditRetention: 2160h
+  auditPurgeInterval: 24h
+  oidcIssuerUrl: https://identity.example.com
+  oidcClientId: greenroute-web
+  oidcAdminGroup: greenroute-admins
+  providerMode: yandex
+  addressProviderMode: auto
+  providerRouterBaseUrl: https://api.routing.yandex.net
+  providerGeocoderBaseUrl: https://geocode-maps.yandex.ru
+  yandexMaxResults: 3
+  # Keep false until the JavaScript API subscription includes traffic layers.
+  yandexTrafficAvailable: false
+  # Operations console: reachable at /admin, and listed in the header. Both off
+  # by default — enabling the link without the page would only link to a 404.
+  adminEnabled: false
+  adminInMenu: false
+  dgisRoutingBaseUrl: https://routing.api.2gis.com
+  dgisMaxResults: 3
+  dgisRateLimitPerMinute: 5
+  dgisMonthlyLimit: 1000
+  dgisGeocoderRateLimitPerMinute: 600
+  dgisGeocoderLocationBias: 37.617635,55.755814
+  providerRequestTimeout: 2500ms
+  providerConnectTimeout: 500ms
+  providerResponseHeaderTimeout: 2s
+  providerBulkheadWaitTimeout: 100ms
+  providerMaxRetries: 2
+  providerRetryBaseDelay: 100ms
+  providerRetryMaxDelay: 1s
+  providerMaxConcurrency: 32
+  providerCircuitFailureThreshold: 5
+  providerCircuitOpenDuration: 30s
+  providerShutdownTimeout: 10s
+  providerMaxRequestBodyBytes: 131072
+  providerMaxResponseBytes: 4194304
+  providerCostPerBillableUnit: 0
+  searchStateTTL: 30m
+  maxActiveCandidates: 12
+  maxConcurrentSearches: 64
+  maxEnhancedIterations: 5
+  minimumScoreImprovement: 0.02
+  sseHeartbeatInterval: 15s
+  orchestratorShutdownGracePeriod: 20s
+  features:
+    enableEnhancedSearch: true
+    enableAvoidZoneGeneration: true
+    enableCorridorAnchors: true
+    enableRouteReranking: true
+    enableLiveRerouting: false
+    enableProviderCache: false
+    providerDataStorageAllowed: false
+    providerDataModificationAllowed: false
+    enableAnonymousUsage: false
+    enableAdminDebugDetails: false
+    allowExperimentalProviderSources: false
+
+secrets:
+  existingSecret: greenroute-runtime
+  keys:
+    databaseUrl: DATABASE_URL
+    redisUrl: REDIS_URL
+    oauth2RedisUrl: OAUTH2_PROXY_REDIS_URL
+    yandexRouterApiKey: YANDEX_ROUTER_API_KEY
+    yandexGeocoderApiKey: YANDEX_GEOCODER_API_KEY
+    dgisApiKey: DGIS_API_KEY
+    yandexMapsBrowserApiKey: NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+    twoGisMapGLBrowserApiKey: NEXT_PUBLIC_2GIS_MAPGL_API_KEY
+    internalApiToken: INTERNAL_API_TOKEN
+    auditHashKey: AUDIT_HASH_KEY
+    abuseHashKey: ABUSE_HASH_KEY
+    abusePreviousHashKey: ABUSE_PREVIOUS_HASH_KEY
+    oauth2ClientSecret: OAUTH2_PROXY_CLIENT_SECRET
+    oauth2CookieSecret: OAUTH2_PROXY_COOKIE_SECRET
+
+migrations:
+  enabled: true
+  serviceAccountName: default
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 3600
+  args: ["migrate", "up"]
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: greenroute.example.com
+  tls:
+    enabled: true
+    secretName: greenroute-tls
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+  prometheusRule:
+    enabled: true
+    labels: {}
+  slo:
+    availabilityTarget: 0.999
+    initialResponseSeconds: 3
+    enhancedSearchSeconds: 10
+
+networkPolicy:
+  enabled: true
+  ingressController:
+    namespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    podSelector:
+      app.kubernetes.io/name: ingress-nginx
+  monitoring:
+    namespaceSelector:
+      kubernetes.io/metadata.name: monitoring
+  observability:
+    namespaceSelector:
+      kubernetes.io/metadata.name: observability
+  databaseCIDRs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+  redisCIDRs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+  providerEgressCIDR: 0.0.0.0/0
+  identityEgressCIDR: 0.0.0.0/0
+  providerDeniedCIDRs:
+    - 10.0.0.0/8
+    - 100.64.0.0/10
+    - 127.0.0.0/8
+    - 169.254.0.0/16
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 224.0.0.0/4
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: [ALL]

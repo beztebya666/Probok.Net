@@ -1,0 +1,187 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HELM_IMAGE: alpine/helm:3.18.3@sha256:e1d0398b27ef1bfab2709f2df998824a6592705655eabaca96125c287942f6ad
+  KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
+  GOLANGCI_IMAGE: golangci/golangci-lint:v2.8.0-alpine@sha256:1194f3bfcbaeeb92d8d159fdfbe2a79d18ec0a222d9d984b1438906bca416b51
+
+jobs:
+  format-lint-contract:
+    name: Format, lint and contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@1e60f620b9541d1c243d3c7b4bc99b512c1f756a # v4.0.3
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Go formatting
+        run: test -z "$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
+      - name: Go vet
+        run: go vet ./...
+      - name: Go lint
+        run: docker run --rm -v "$PWD:/work" -w /work "$GOLANGCI_IMAGE" golangci-lint run ./...
+      - name: Frontend install
+        run: npm --prefix apps/web ci --ignore-scripts
+      - name: Frontend lint and types
+        run: npm --prefix apps/web run lint && npm --prefix apps/web run typecheck
+      - name: OpenAPI 3.1 lint
+        run: |
+          mapfile -t specs < <(find . -name 'openapi.yaml' -o -name 'openapi.yml')
+          test ${#specs[@]} -gt 0
+          npx --yes @redocly/cli@1.34.3 lint "${specs[@]}"
+
+  backend-tests:
+    name: Backend unit and contract tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests with race detector
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: Provider contract tests
+        run: go test -race -count=1 ./services/provider-yandex -run 'Contract|Official|Normalize|ErrorMapping'
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: backend-coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-tests:
+    name: Frontend unit and production build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d1c243d3c7b4bc99b512c1f756a # v4.0.3
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm --prefix apps/web ci --ignore-scripts
+      - run: npm --prefix apps/web test
+      - name: Build without server credential
+        env:
+          NEXT_PUBLIC_EDGE_API_BASE_URL: http://localhost:8080
+          NEXT_PUBLIC_DEMO_MODE: "false"
+        run: npm --prefix apps/web run build
+      - name: Assert server API key is absent from bundle
+        run: |
+          ! grep -R -E 'YANDEX_ROUTER_API_KEY|api\.routing\.yandex\.net.*apikey' apps/web/.next/static
+
+  helm-validate:
+    name: Helm lint and Kubernetes schema
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Lint every values profile
+        run: |
+          for values in values-dev.yaml values-stage.yaml values-prod.yaml; do
+            docker run --rm -v "$PWD:/work" -w /work "$HELM_IMAGE" lint deploy/helm/greenroute -f "deploy/helm/greenroute/$values" --strict
+          done
+      - name: Prove schema and cross-field policies fail closed
+        run: |
+          for invalid in \
+            topLevelTypo=true \
+            config.unexpectedField=true \
+            config.features.unexpectedFeature=true \
+            secrets.keys.unexpectedSecret=VALUE \
+            migrations.unexpectedField=true \
+            ingress.tls.unexpectedField=true \
+            config.maxConcurrentSSE=256 \
+            config.features.enableProviderCache=true \
+            services.routing-orchestrator.replicas=2 \
+            autoscaling.minReplicas=21 \
+            secrets.keys.oauth2RedisUrl=REDIS_URL; do
+            if docker run --rm -v "$PWD:/work" -w /work "$HELM_IMAGE" \
+              template greenroute deploy/helm/greenroute -f deploy/helm/greenroute/values-prod.yaml --set "$invalid" >/dev/null 2>&1; then
+              echo "schema unexpectedly accepted $invalid" >&2
+              exit 1
+            fi
+          done
+      - name: Render production manifests
+        run: docker run --rm -v "$PWD:/work" -w /work "$HELM_IMAGE" template greenroute deploy/helm/greenroute --namespace greenroute -f deploy/helm/greenroute/values-prod.yaml > rendered.yaml
+      - name: Assert internal call graph and NetworkPolicy pairs
+        run: python3 tools/assert-rendered-call-graph.py rendered.yaml
+      - name: Test short-lived deployment credential helper
+        run: python3 -B -m unittest tools/test_github_oidc_exec_credential.py tools/test_helm_values_schema.py
+      - name: Validate Kubernetes schemas
+        run: docker run --rm -v "$PWD:/work" -w /work "$KUBECONFORM_IMAGE" -strict -summary -ignore-missing-schemas /work/rendered.yaml
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: rendered-kubernetes
+          path: rendered.yaml
+          if-no-files-found: error
+          retention-days: 14
+
+  compose-integration:
+    name: Compose integration
+    runs-on: ubuntu-24.04
+    needs: [format-lint-contract, backend-tests]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate Compose and image pins
+        run: docker compose config --quiet && sh tools/check-image-pins.sh && python3 tools/assert-compose-runtime-env.py
+      - name: Build and start isolated stack
+        run: docker compose -p greenroute-ci up -d --build --wait postgres redis provider-yandex routing-orchestrator edge-api
+      - name: Integration and idempotency smoke
+        run: sh tools/integration-smoke.sh
+      - name: Capture diagnostics
+        if: failure()
+        run: docker compose -p greenroute-ci ps && docker compose -p greenroute-ci logs --no-color --tail=300
+      - name: Stop isolated stack
+        if: always()
+        run: docker compose -p greenroute-ci down -v --remove-orphans
+
+  e2e:
+    name: Ephemeral environment and Playwright E2E
+    runs-on: ubuntu-24.04
+    needs: [frontend-tests, compose-integration, helm-validate]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d1c243d3c7b4bc99b512c1f756a # v4.0.3
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm --prefix apps/web ci --ignore-scripts
+      - run: npm --prefix apps/web exec playwright install --with-deps chromium
+      - name: Start ephemeral full stack
+        run: docker compose -p greenroute-e2e up -d --build --wait
+      - name: Run browser acceptance suite
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: npm --prefix apps/web run test:e2e
+      - name: Capture diagnostics
+        if: failure()
+        run: docker compose -p greenroute-e2e ps && docker compose -p greenroute-e2e logs --no-color --tail=300
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove ephemeral environment
+        if: always()
+        run: docker compose -p greenroute-e2e down -v --remove-orphans

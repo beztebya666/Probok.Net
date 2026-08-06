@@ -1,0 +1,205 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "greenroute.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "greenroute.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: {{ $service.replicas }}
+  revisionHistoryLimit: {{ $.Values.global.revisionHistoryLimit }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list $ $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "greenroute.componentSelectorLabels" (list $ $name) | nindent 8 }}
+        {{- with $.Values.global.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        {{- with $.Values.global.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "greenroute.serviceAccountName" $ }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ $.Values.global.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        {{- range $.Values.topologySpreadConstraints }}
+        - maxSkew: {{ .maxSkew }}
+          topologyKey: {{ .topologyKey }}
+          whenUnsatisfiable: {{ .whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list $ $name) | nindent 14 }}
+        {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "greenroute.image" (list $ $service.image) | quote }}
+          imagePullPolicy: {{ (index $.Values.images $service.image).pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "greenroute.fullname" $ }}-config
+          env:
+            - name: HTTP_ADDR
+              value: {{ printf ":%v" $service.port | quote }}
+            {{- if eq $name "edge-api" }}
+            - name: EDGE_ADDR
+              value: {{ printf ":%v" $service.port | quote }}
+            - name: REQUIRE_REDIS
+              value: {{ ternary "true" "false" (eq $.Values.global.environment "prod") | quote }}
+            - name: REQUIRE_DATABASE
+              value: {{ ternary "true" "false" (eq $.Values.global.environment "prod") | quote }}
+            - name: SHUTDOWN_GRACE_PERIOD
+              value: {{ $.Values.config.edgeShutdownGracePeriod | quote }}
+            {{- else if eq $name "routing-orchestrator" }}
+            - name: ORCHESTRATOR_ADDR
+              value: {{ printf ":%v" $service.port | quote }}
+            - name: REQUIRE_REDIS
+              value: {{ $.Values.config.features.providerDataStorageAllowed | quote }}
+            - name: SHUTDOWN_GRACE_PERIOD
+              value: {{ $.Values.config.orchestratorShutdownGracePeriod | quote }}
+            {{- else if eq $name "provider-yandex" }}
+            - name: PROVIDER_ADDR
+              value: {{ printf ":%v" $service.port | quote }}
+            {{- end }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ $name | quote }}
+            - name: HOME
+              value: /tmp
+            {{- if ne $name "web" }}
+            - name: INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.internalApiToken }}
+            {{- end }}
+            {{- if eq $name "edge-api" }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.databaseUrl }}
+            {{- end }}
+            {{- if or (eq $name "edge-api") (eq $name "routing-orchestrator") }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.redisUrl }}
+            {{- end }}
+            {{- if eq $name "edge-api" }}
+            - name: AUDIT_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.auditHashKey }}
+                  optional: {{ ne $.Values.global.environment "prod" }}
+            - name: ABUSE_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.abuseHashKey }}
+                  optional: {{ ne $.Values.global.environment "prod" }}
+            - name: ABUSE_PREVIOUS_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.abusePreviousHashKey }}
+                  optional: true
+            {{- end }}
+            {{- if and (eq $name "provider-yandex") (eq $.Values.config.providerMode "yandex") }}
+            - name: YANDEX_ROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.yandexRouterApiKey }}
+            - name: YANDEX_GEOCODER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.yandexGeocoderApiKey }}
+                  optional: true
+            {{- end }}
+            {{- if and (eq $name "provider-yandex") (eq $.Values.config.providerMode "2gis") }}
+            - name: DGIS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.dgisApiKey }}
+            {{- end }}
+            {{- if eq $name "web" }}
+            - name: NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.yandexMapsBrowserApiKey }}
+                  optional: true
+            - name: NEXT_PUBLIC_2GIS_MAPGL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.existingSecret }}
+                  key: {{ $.Values.secrets.keys.twoGisMapGLBrowserApiKey }}
+                  optional: true
+            - name: PORT
+              value: {{ $service.port | quote }}
+            - name: HOSTNAME
+              value: 0.0.0.0
+            - name: NODE_ENV
+              value: production
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $service.port }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: {{ $service.health.livePath }}
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 1
+          livenessProbe:
+            httpGet:
+              path: {{ $service.health.livePath }}
+              port: http
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: {{ $service.health.readyPath }}
+              port: http
+            failureThreshold: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+{{- end }}

@@ -1,0 +1,577 @@
+openapi: 3.1.0
+info:
+  title: GreenRoute Edge API
+  version: 1.1.0
+  summary: Traffic-aware route search with explicit uncertainty and hard detour limits.
+  description: |
+    Public BFF contract. Route colors and congestion classes are GreenRoute estimates,
+    not official traffic levels of the map provider. UNKNOWN is never equivalent to GREEN.
+  contact:
+    name: GreenRoute maintainers
+  license:
+    name: Proprietary — see repository licensing documents
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: /
+    description: Same-origin deployment; local default is http://localhost:8080.
+tags:
+  - name: Searches
+    description: Bounded asynchronous search, polling, cancellation, and event replay.
+  - name: Address search
+    description: Provider-neutral address resolution without exposing server credentials.
+  - name: Identity
+    description: Current OIDC or explicitly enabled local identity.
+  - name: Administration
+    description: Role-protected aggregate operations view without exact routes.
+  - name: Health
+    description: Kubernetes probes and Prometheus scraping endpoints.
+security:
+  - oauth2: [openid, profile]
+paths:
+  /api/v1/route-searches:
+    post:
+      tags: [Searches]
+      operationId: createRouteSearch
+      summary: Start a bounded route search
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RouteSearchRequest' }
+            examples:
+              greenest:
+                value:
+                  origin: { latitude: 55.751244, longitude: 37.618423 }
+                  destination: { latitude: 55.8319, longitude: 37.4116 }
+                  waypoints: []
+                  routingMode: GREENEST
+                  maxExtraDistanceMeters: 30000
+                  maxExtraDistancePercent: 50
+                  maxExtraTimeSeconds: 1200
+                  avoidTolls: false
+                  avoidUnpaved: false
+                  strictness: 0.8
+                  maxProviderRequests: 8
+                  searchDeadlineMs: 10000
+      responses:
+        '200':
+          description: Initial and enhanced search completed within the synchronous window.
+          headers:
+            Location: { $ref: '#/components/headers/SearchLocation' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteSearchResult' }
+        '202':
+          description: Search accepted; subscribe to SSE or poll the resource.
+          headers:
+            Location: { $ref: '#/components/headers/SearchLocation' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteSearchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/route-searches/{searchId}:
+    parameters:
+      - $ref: '#/components/parameters/SearchID'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Searches]
+      operationId: getRouteSearch
+      summary: Read current or terminal search state
+      responses:
+        '200':
+          description: Current search state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteSearchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Searches]
+      operationId: deleteRouteSearch
+      summary: Cancel execution and delete authorized transient search state
+      responses:
+        '204': { description: Search cancelled and state removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/route-searches/{searchId}/events:
+    parameters:
+      - $ref: '#/components/parameters/SearchID'
+      - $ref: '#/components/parameters/RequestID'
+      - name: Last-Event-ID
+        in: header
+        required: false
+        description: Last processed monotonically increasing event ID for replay.
+        schema: { type: integer, format: int64, minimum: 0 }
+    get:
+      tags: [Searches]
+      operationId: streamRouteSearchEvents
+      summary: Replay and stream route-search progress via SSE
+      responses:
+        '200':
+          description: A text/event-stream whose data field contains SearchEvent JSON.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'no-cache, no-transform' }
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/SearchEvent' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/geosuggest:
+    get:
+      tags: [Address search]
+      operationId: suggestAddresses
+      summary: Resolve address suggestions to WGS84 points via the provider adapter
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 200 }
+        - name: lang
+          in: query
+          schema: { type: string, enum: [ru_RU, en_US], default: ru_RU }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10, default: 5 }
+      responses:
+        '200':
+          description: Provider-neutral suggestions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GeosuggestResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentIdentity
+      summary: Read the current identity and effective application roles
+      responses:
+        '200':
+          description: Current authenticated or explicitly enabled local identity.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/overview:
+    get:
+      tags: [Administration]
+      operationId: getAdminOverview
+      summary: Privacy-safe operational and scoring overview
+      responses:
+        '200':
+          description: Aggregated overview; exact user routes are never included.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: liveness
+      summary: Check whether the edge process is alive
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: readiness
+      summary: Check required edge dependencies
+      security: []
+      responses:
+        '200':
+          description: Required dependencies are ready.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+        '503':
+          description: One or more required dependencies are unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+  /metrics:
+    get:
+      tags: [Health]
+      operationId: prometheusMetrics
+      summary: Expose Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition format. Network policy should restrict this endpoint.
+          content:
+            text/plain:
+              schema: { type: string }
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: OIDC/OAuth 2.1 access token validated against configured issuer JWKS.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://identity.example.invalid/authorize
+          tokenUrl: https://identity.example.invalid/token
+          scopes:
+            openid: Authenticate the user.
+            profile: Read stable subject and display name.
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Caller correlation ID; a UUID is generated if absent or invalid.
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Subject-scoped key. Reuse with a different semantic body returns 409.
+      schema: { type: string, pattern: '^[!-~]{8,128}$' }
+    SearchID:
+      name: searchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  headers:
+    SearchLocation:
+      description: Canonical public URL of the accepted search.
+      schema: { type: string, pattern: '^/api/v1/route-searches/[0-9a-f-]{36}$' }
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Unauthorized:
+      description: Missing or invalid access token.
+      headers:
+        WWW-Authenticate: { schema: { type: string } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Forbidden:
+      description: Authenticated identity lacks the required role.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    NotFound:
+      description: Search missing, expired, deleted, or owned by another subject.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Conflict:
+      description: Idempotency key conflict or the original call remains in progress.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    UnprocessableEntity:
+      description: Syntactically valid request violates domain constraints.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    RateLimited:
+      description: Per-user or per-IP rate limit exceeded.
+      headers:
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Unavailable:
+      description: Required dependency is temporarily unavailable.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+  schemas:
+    GeoPoint:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    RoutingMode:
+      type: string
+      enum: [FASTEST, BALANCED, GREENEST, STRICT_GREEN]
+    RouteSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [origin, destination, routingMode, maxExtraDistanceMeters, maxExtraTimeSeconds]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        origin: { $ref: '#/components/schemas/GeoPoint' }
+        destination: { $ref: '#/components/schemas/GeoPoint' }
+        waypoints:
+          type: array
+          maxItems: 16
+          items: { $ref: '#/components/schemas/GeoPoint' }
+        departureTime: { type: string, format: date-time }
+        routingMode: { $ref: '#/components/schemas/RoutingMode' }
+        maxExtraDistanceMeters: { type: integer, format: int64, minimum: 0, maximum: 150000 }
+        maxExtraDistancePercent: { type: number, minimum: 0, maximum: 300, default: 0 }
+        maxExtraTimeSeconds: { type: integer, format: int64, minimum: 0, maximum: 18000 }
+        avoidTolls: { type: boolean, default: false }
+        avoidUnpaved: { type: boolean, default: false }
+        strictness: { type: number, minimum: 0, maximum: 1, default: 0.7 }
+        maxProviderRequests: { type: integer, minimum: 1, maximum: 20, default: 8 }
+        searchDeadlineMs: { type: integer, minimum: 500, maximum: 30000, default: 10000 }
+    Confidence:
+      type: object
+      additionalProperties: false
+      required: [level, score]
+      properties:
+        level: { type: string, enum: [HIGH, MEDIUM, LOW] }
+        score: { type: number, minimum: 0, maximum: 1 }
+        reasons:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z0-9_]+$' }
+    CongestionClass:
+      type: string
+      enum: [GREEN, YELLOW, ORANGE, RED, UNKNOWN]
+    RouteSegment:
+      type: object
+      additionalProperties: false
+      required: [segmentId, geometry, distanceMeters, liveDurationSeconds, baselineDurationSeconds, trafficRatio, congestionClass, confidence, geometrySimilarity, source]
+      properties:
+        segmentId: { type: string, minLength: 1 }
+        geometry:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/GeoPoint' }
+        distanceMeters: { type: integer, format: int64, minimum: 0 }
+        liveDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        baselineDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        trafficRatio: { type: number, minimum: 0 }
+        congestionClass: { $ref: '#/components/schemas/CongestionClass' }
+        confidence: { $ref: '#/components/schemas/Confidence' }
+        geometrySimilarity: { type: number, minimum: 0, maximum: 1 }
+        source: { type: string, minLength: 1 }
+    RouteMetrics:
+      type: object
+      additionalProperties: false
+      required: [greenDistanceMeters, yellowDistanceMeters, orangeDistanceMeters, redDistanceMeters, unknownDistanceMeters, greenDurationSeconds, yellowDurationSeconds, orangeDurationSeconds, redDurationSeconds, unknownDurationSeconds, totalTrafficDelaySeconds, congestedDistancePercent, congestedDurationPercent, greenDistancePercent, worstContinuousCongestionMeters]
+      properties:
+        greenDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        yellowDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        orangeDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        redDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        unknownDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        greenDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        yellowDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        orangeDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        redDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        unknownDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        totalTrafficDelaySeconds: { type: integer, format: int64, minimum: 0 }
+        congestedDistancePercent: { type: number, minimum: 0, maximum: 100 }
+        congestedDurationPercent: { type: number, minimum: 0, maximum: 100 }
+        greenDistancePercent: { type: number, minimum: 0, maximum: 100 }
+        worstContinuousCongestionMeters: { type: integer, format: int64, minimum: 0 }
+    RouteCandidate:
+      type: object
+      additionalProperties: false
+      required: [candidateId, provider, trafficDataType, geometry, distanceMeters, liveDurationSeconds, baselineDurationSeconds, trafficDelaySeconds, segments, blocked, tolls, unpaved, confidence, score, reasonCodes, explanation, generatedBy, providerRequestCount, metrics]
+      properties:
+        candidateId: { type: string, minLength: 1 }
+        provider: { type: string, minLength: 1 }
+        providerRouteReference: { type: string }
+        trafficDataType: { type: string, enum: [REALTIME, FORECAST, BASELINE, SYNTHETIC, UNKNOWN] }
+        geometry:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/GeoPoint' }
+        distanceMeters: { type: integer, format: int64, exclusiveMinimum: 0 }
+        liveDurationSeconds: { type: integer, format: int64, exclusiveMinimum: 0 }
+        baselineDurationSeconds: { type: integer, format: int64, minimum: 0 }
+        trafficDelaySeconds: { type: integer, format: int64, minimum: 0 }
+        segments:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/RouteSegment' }
+        blocked: { type: boolean }
+        tolls: { type: boolean }
+        unpaved: { type: boolean }
+        confidence: { $ref: '#/components/schemas/Confidence' }
+        score: { type: number }
+        reasonCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z0-9_]+$' }
+        explanation: { type: string, minLength: 1 }
+        generatedBy: { type: string, minLength: 1 }
+        providerRequestCount: { type: integer, minimum: 0 }
+        metrics: { $ref: '#/components/schemas/RouteMetrics' }
+    AppliedConstraints:
+      type: object
+      additionalProperties: false
+      required: [maxExtraDistanceMeters, maxExtraDistancePercent, maxExtraTimeSeconds, minimumConfidenceScore, avoidTolls, avoidUnpaved]
+      properties:
+        maxExtraDistanceMeters: { type: integer, format: int64, minimum: 0 }
+        maxExtraDistancePercent: { type: number, minimum: 0 }
+        maxExtraTimeSeconds: { type: integer, format: int64, minimum: 0 }
+        minimumConfidenceScore: { type: number, minimum: 0, maximum: 1 }
+        avoidTolls: { type: boolean }
+        avoidUnpaved: { type: boolean }
+    ProviderUsage:
+      type: object
+      additionalProperties: false
+      required: [provider, requestsUsed, requestBudget, estimatedBillableUnits, estimatedCost, budgetExhausted]
+      properties:
+        provider: { type: string }
+        requestsUsed: { type: integer, minimum: 0 }
+        requestBudget: { type: integer, minimum: 1 }
+        estimatedBillableUnits: { type: integer, minimum: 0 }
+        estimatedCost: { type: number, minimum: 0, description: Zero when tariff data is not configured. }
+        budgetExhausted: { type: boolean }
+    RouteSearchResult:
+      type: object
+      additionalProperties: false
+      required: [searchId, requestId, status, alternatives, bestEffortRoutes, constraints, providerUsage, warnings, scoringPolicyVersion, generatedAt, expiresAt]
+      properties:
+        searchId: { type: string, format: uuid }
+        requestId: { type: string, minLength: 8 }
+        status: { type: string, enum: [ACCEPTED, SEARCHING, COMPLETED, DEGRADED, FAILED, CANCELLED] }
+        selectedRoute: { $ref: '#/components/schemas/RouteCandidate' }
+        alternatives:
+          type: array
+          items: { $ref: '#/components/schemas/RouteCandidate' }
+        bestEffortRoutes:
+          type: array
+          maxItems: 3
+          description: >-
+            Top discovered candidates that failed the STRICT_GREEN evidence
+            predicate. They are proof of search, never selectable strict-green
+            alternatives, and carry BEST_EFFORT_NOT_STRICT_GREEN plus precise
+            STRICT_GREEN_* rejection reason codes.
+          items: { $ref: '#/components/schemas/RouteCandidate' }
+        greenTopRoutes:
+          type: array
+          maxItems: 3
+          description: >-
+            Proof-of-search ranking by measured green share, present in every
+            routing mode. Ordered by the share of driving time on GREEN segments
+            and then by green distance, independent of whether a candidate also
+            satisfies the mode's hard constraints. Entries carry GREEN_RANK_1..3.
+          items: { $ref: '#/components/schemas/RouteCandidate' }
+        fastestReferenceRoute: { $ref: '#/components/schemas/RouteCandidate' }
+        constraints: { $ref: '#/components/schemas/AppliedConstraints' }
+        providerUsage: { $ref: '#/components/schemas/ProviderUsage' }
+        warnings:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z0-9_: -]+$' }
+        scoringPolicyVersion: { type: string, minLength: 1 }
+        generatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    SearchEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, searchId, type, timestamp]
+      properties:
+        eventId: { type: integer, format: int64, minimum: 1 }
+        searchId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [SEARCH_ACCEPTED, PROVIDER_REQUEST_STARTED, INITIAL_CANDIDATES_READY, CANDIDATE_EVALUATED, DETOUR_SEARCH_STARTED, BETTER_ROUTE_FOUND, SEARCH_COMPLETED, SEARCH_DEGRADED, SEARCH_FAILED]
+        timestamp: { type: string, format: date-time }
+        message: { type: string }
+        candidate: { $ref: '#/components/schemas/RouteCandidate' }
+        result: { $ref: '#/components/schemas/RouteSearchResult' }
+        metadata: { type: object, additionalProperties: true }
+    GeoSuggestion:
+      type: object
+      additionalProperties: false
+      required: [id, label, point]
+      properties:
+        id: { type: string, minLength: 1 }
+        label: { type: string, minLength: 1 }
+        subtitle: { type: string }
+        point: { $ref: '#/components/schemas/GeoPoint' }
+    GeosuggestResponse:
+      type: object
+      additionalProperties: false
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/GeoSuggestion' }
+    Identity:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, roles, authenticated]
+      properties:
+        userId: { type: string }
+        displayName: { type: string }
+        roles:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [user, admin] }
+        authenticated: { type: boolean }
+    APIIntegration:
+      type: object
+      additionalProperties: false
+      description: Privacy-safe metadata for an API selected by the provider adapter; never contains credentials, account identifiers, or credential-derived usage.
+      required: [id, provider, product, apiVersion, capability, role, state]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        provider: { type: string, minLength: 1, maxLength: 128 }
+        product: { type: string, minLength: 1, maxLength: 128 }
+        apiVersion: { type: string, minLength: 1, maxLength: 128 }
+        capability: { type: string, enum: [routing, address-search] }
+        role: { type: string, enum: [primary, fallback] }
+        state: { type: string, enum: [active, standby] }
+    AdminOverview:
+      type: object
+      additionalProperties: true
+      required: [provider, scoringPolicy, searches, featureFlags, apiIntegrations]
+      properties:
+        provider: { type: object, additionalProperties: true }
+        scoringPolicy: { type: object, additionalProperties: true }
+        searches: { type: object, additionalProperties: true }
+        apiIntegrations:
+          type: array
+          maxItems: 8
+          description: Exact server-side API products and versions selected at runtime. Browser APIs are reported by the web runtime separately.
+          items: { $ref: '#/components/schemas/APIIntegration' }
+        featureFlags:
+          type: object
+          additionalProperties: { type: boolean }
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, service]
+      properties:
+        status: { type: string, const: ok }
+        service: { type: string }
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string }
+        correlationId: { type: string }
+        errors:
+          type: object
+          additionalProperties: { type: string }

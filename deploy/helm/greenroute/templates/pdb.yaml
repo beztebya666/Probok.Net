@@ -1,0 +1,18 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "greenroute.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "greenroute.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  minAvailable: {{ min $.Values.podDisruptionBudget.minAvailable $service.replicas }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list $ $name) | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,66 @@
+global:
+  environment: prod
+  terminationGracePeriodSeconds: 45
+
+authProxy:
+  enabled: true
+  replicas: 3
+
+services:
+  edge-api:
+    replicas: 3
+    resources:
+      requests: {cpu: 250m, memory: 256Mi}
+      limits: {cpu: 1500m, memory: 768Mi}
+  routing-orchestrator:
+    replicas: 1
+    resources:
+      requests: {cpu: 500m, memory: 384Mi}
+      limits: {cpu: 2000m, memory: 1Gi}
+  provider-yandex:
+    replicas: 3
+    resources:
+      requests: {cpu: 250m, memory: 256Mi}
+      limits: {cpu: 1000m, memory: 512Mi}
+  web:
+    replicas: 3
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits: {cpu: 1000m, memory: 768Mi}
+
+config:
+  otelEndpoint: https://otel-collector.observability.svc.cluster.local:4318
+  otelInsecure: false
+  edgePublicUrl: https://greenroute.example.com
+  corsAllowedOrigins: https://greenroute.example.com
+  providerMode: yandex
+  features:
+    enableAnonymousUsage: false
+    enableLiveRerouting: false
+    enableProviderCache: false
+    providerDataStorageAllowed: false
+    providerDataModificationAllowed: false
+    enableAdminDebugDetails: false
+    allowExperimentalProviderSources: false
+
+ingress:
+  enabled: true
+  host: greenroute.example.com
+  tls:
+    enabled: true
+    secretName: greenroute-tls
+
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 20
+
+podDisruptionBudget:
+  minAvailable: 2
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway

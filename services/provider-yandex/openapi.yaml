@@ -1,0 +1,307 @@
+openapi: 3.1.0
+info:
+  title: GreenRoute Provider Adapter API
+  version: 1.0.0
+  description: Internal provider-neutral boundary for Yandex, 2GIS, or an explicit local stub. Responses are non-cacheable.
+servers:
+  - url: http://provider-yandex:8082
+security:
+  - bearerAuth: []
+paths:
+  /internal/v1/routes:
+    post:
+      operationId: buildProviderRoutes
+      summary: Build normalized route candidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderRouteRequest'
+      responses:
+        '200':
+          description: Normalized candidates
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderRouteResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '499':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
+  /internal/v1/capabilities:
+    get:
+      operationId: getProviderCapabilities
+      summary: Return configured and officially verified capabilities
+      responses:
+        '200':
+          description: Capability document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider, mode, contractVersion, maxAlternatives, maxWaypoints]
+                additionalProperties: true
+                properties:
+                  provider: { type: string }
+                  mode: { type: string }
+                  contractVersion: { type: string, const: v1 }
+                  maxAlternatives: { type: integer, minimum: 0, maximum: 2 }
+                  maxWaypoints: { type: integer, minimum: 2, maximum: 50 }
+                  realtimeTraffic: { type: boolean }
+                  trafficDisabledBaseline: { type: boolean }
+                  departureTime: { type: boolean }
+                  avoidZones: { type: boolean }
+                  geosuggest: { type: boolean }
+                  addressSearchProvider: { type: string, enum: [yandex, 2gis] }
+                  addressSearchEndpoint: { type: string, format: uri }
+                  requestsPerMinute: { type: integer, minimum: 0 }
+                  monthlyRequestLimit: { type: integer, minimum: 1 }
+                  coverage:
+                    type: array
+                    items: { type: string }
+  /internal/v1/geosuggest:
+    get:
+      operationId: getProviderSuggestions
+      summary: Return point-bearing address matches from the active provider's official HTTP Geocoder
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: lang
+          in: query
+          description: Official Geocoder response locale
+          schema:
+            type: string
+            enum: [ru_RU, uk_UA, be_BY, en_RU, en_US, tr_TR]
+            default: ru_RU
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10, default: 7 }
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestions]
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GeoSuggestion'
+        '400':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
+        '501':
+          $ref: '#/components/responses/Error'
+  /health/live:
+    get:
+      operationId: providerLiveness
+      summary: Report whether the provider process is alive
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /health/ready:
+    get:
+      operationId: providerReadiness
+      summary: Report whether the provider adapter is ready
+      security: []
+      responses:
+        '200':
+          description: Adapter is ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: Adapter is not ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /metrics:
+    get:
+      operationId: providerMetrics
+      summary: Expose Prometheus metrics for internal collection
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition
+          content:
+            text/plain:
+              schema: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque internal service token
+  responses:
+    Error:
+      description: Sanitized service error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    GeoPoint:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    AvoidZone:
+      type: object
+      additionalProperties: false
+      required: [points]
+      properties:
+        points:
+          type: array
+          minItems: 3
+          maxItems: 32
+          items: { $ref: '#/components/schemas/GeoPoint' }
+    ProviderRouteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - origin
+        - destination
+        - traffic
+        - alternatives
+        - avoidTolls
+        - avoidUnpaved
+        - requestBudget
+        - deadlineMs
+      properties:
+        requestId:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+        origin: { $ref: '#/components/schemas/GeoPoint' }
+        destination: { $ref: '#/components/schemas/GeoPoint' }
+        waypoints:
+          type: array
+          maxItems: 48
+          items: { $ref: '#/components/schemas/GeoPoint' }
+        traffic: { type: boolean }
+        alternatives: { type: integer, minimum: 0, maximum: 2 }
+        avoidTolls: { type: boolean }
+        avoidUnpaved: { type: boolean }
+        departureUnix: { type: integer, minimum: 1 }
+        avoidZones:
+          type: array
+          maxItems: 8
+          items: { $ref: '#/components/schemas/AvoidZone' }
+        requestBudget: { type: integer, minimum: 1, maximum: 20 }
+        deadlineMs: { type: integer, minimum: 100, maximum: 30000 }
+    ProviderRouteResponse:
+      type: object
+      additionalProperties: false
+      required: [candidates, requestsUsed, estimatedBillableUnits, budgetRemaining, degraded]
+      properties:
+        candidates:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/RouteCandidate' }
+        requestsUsed: { type: integer, minimum: 0 }
+        estimatedBillableUnits: { type: integer, minimum: 0 }
+        budgetRemaining: { type: integer, minimum: 0 }
+        warnings:
+          type: array
+          items: { type: string }
+        degraded: { type: boolean }
+    RouteCandidate:
+      type: object
+      additionalProperties: true
+      required:
+        - candidateId
+        - provider
+        - trafficDataType
+        - geometry
+        - distanceMeters
+        - liveDurationSeconds
+        - baselineDurationSeconds
+        - segments
+        - blocked
+        - tolls
+        - confidence
+        - reasonCodes
+        - generatedBy
+        - providerRequestCount
+      properties:
+        candidateId: { type: string }
+        provider: { type: string, enum: [yandex, 2gis, stub] }
+        trafficDataType: { type: string, enum: [REALTIME, FORECAST, BASELINE, SYNTHETIC, UNKNOWN] }
+        geometry:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/GeoPoint' }
+        distanceMeters: { type: integer, minimum: 1 }
+        liveDurationSeconds: { type: integer, minimum: 0 }
+        baselineDurationSeconds: { type: integer, minimum: 0 }
+        trafficDelaySeconds: { type: integer, minimum: 0 }
+        segments:
+          type: array
+          items: { type: object, additionalProperties: true }
+        blocked: { type: boolean }
+        tolls: { type: boolean }
+        unpaved: { type: boolean }
+        confidence: { type: object, additionalProperties: true }
+        reasonCodes:
+          type: array
+          items: { type: string }
+        generatedBy: { type: string }
+        providerRequestCount: { type: integer, minimum: 0 }
+    GeoSuggestion:
+      type: object
+      additionalProperties: false
+      required: [id, label, point]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        subtitle: { type: string }
+        point: { $ref: '#/components/schemas/GeoPoint' }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId: { type: string }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            retryable: { type: boolean }
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, ready, not_ready] }

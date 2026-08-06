@@ -1,0 +1,315 @@
+name: Release and controlled deployment
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected environment to deploy after build/sign/scan
+        type: choice
+        required: true
+        default: none
+        options: [none, stage, prod]
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.environment || 'build-only' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-sign-scan:
+    name: Build, SBOM, scan and sign ${{ matrix.component }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - component: edge-api
+            context: .
+            dockerfile: services/edge-api/Dockerfile
+          - component: routing-orchestrator
+            context: .
+            dockerfile: services/routing-orchestrator/Dockerfile
+          - component: provider-yandex
+            context: .
+            dockerfile: services/provider-yandex/Dockerfile
+          - component: web
+            context: apps/web
+            dockerfile: apps/web/Dockerfile
+          - component: oauth2-proxy
+            context: .
+            dockerfile: deploy/images/oauth2-proxy.Dockerfile
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=tag
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          pull: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+      - name: Keyless sign exact manifest digest
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+      - name: Scan exact pushed digest
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: dist/${{ matrix.component }}/sbom.cdx.json
+          upload-artifact: false
+      - name: Record immutable digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "dist/${{ matrix.component }}"
+          printf '%s' "$DIGEST" > "dist/${{ matrix.component }}/digest.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.component }}
+          path: dist/${{ matrix.component }}
+          if-no-files-found: error
+          retention-days: 90
+
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    if: github.event_name == 'workflow_dispatch' && inputs.environment != 'none'
+    needs: build-sign-scan
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: dist
+      - uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v3.18.3
+      - uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        with:
+          version: v1.34.3
+      - name: Configure short-lived GitHub OIDC cluster credential
+        env:
+          KUBE_API_SERVER: ${{ vars.KUBE_API_SERVER }}
+          KUBE_CA_CERT_DATA: ${{ vars.KUBE_CA_CERT_DATA }}
+          KUBE_OIDC_AUDIENCE: ${{ vars.KUBE_OIDC_AUDIENCE || 'greenroute-kubernetes' }}
+          RELEASE_NAMESPACE: ${{ vars.RELEASE_NAMESPACE || 'greenroute' }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          : "${KUBE_API_SERVER:?KUBE_API_SERVER is required on the protected environment}"
+          : "${KUBE_CA_CERT_DATA:?KUBE_CA_CERT_DATA is required on the protected environment}"
+          : "${KUBE_OIDC_AUDIENCE:?KUBE_OIDC_AUDIENCE is required on the protected environment}"
+          case "$KUBE_API_SERVER" in https://*) ;; *) echo 'KUBE_API_SERVER must use HTTPS' >&2; exit 1;; esac
+          ca_file="$RUNNER_TEMP/greenroute-cluster-ca.crt"
+          printf '%s' "$KUBE_CA_CERT_DATA" | base64 --decode > "$ca_file"
+          grep -q -- '-----BEGIN CERTIFICATE-----' "$ca_file"
+          export KUBECONFIG="$RUNNER_TEMP/greenroute-kubeconfig"
+          kubectl config set-cluster greenroute \
+            --server="$KUBE_API_SERVER" --certificate-authority="$ca_file" --embed-certs=true
+          kubectl config set-credentials github-actions-oidc \
+            --exec-command=python3 \
+            --exec-api-version=client.authentication.k8s.io/v1 \
+            --exec-interactive-mode=Never \
+            --exec-arg="$GITHUB_WORKSPACE/tools/github-oidc-exec-credential.py" \
+            --exec-env="GREENROUTE_KUBE_OIDC_AUDIENCE=$KUBE_OIDC_AUDIENCE" \
+            --exec-env="GREENROUTE_EXPECTED_OIDC_SUBJECT=repo:$GITHUB_REPOSITORY:environment:$DEPLOY_ENVIRONMENT"
+          kubectl config set-context greenroute --cluster=greenroute --user=github-actions-oidc --namespace="$RELEASE_NAMESPACE"
+          kubectl config use-context greenroute
+          chmod 600 "$KUBECONFIG"
+          echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"
+          identity=$(kubectl --request-timeout=20s auth whoami -o jsonpath='{.status.userInfo.username}')
+          case "$identity" in
+            *"repo:$GITHUB_REPOSITORY:environment:$DEPLOY_ENVIRONMENT"*) ;;
+            *) echo 'cluster identity is not scoped to this repository and protected environment' >&2; exit 1 ;;
+          esac
+          test "$(kubectl get namespace "$RELEASE_NAMESPACE" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}')" = restricted
+          test -n "$(kubectl -n "$RELEASE_NAMESPACE" get resourcequota -o name)"
+          test -n "$(kubectl -n "$RELEASE_NAMESPACE" get limitrange -o name)"
+      - name: Verify digest artifacts
+        run: |
+          for component in edge-api routing-orchestrator provider-yandex web oauth2-proxy; do
+            file="dist/release-$component/digest.txt"
+            test -s "$file"
+            grep -Eq '^sha256:[a-f0-9]{64}$' "$file"
+          done
+      - name: Validate protected environment configuration
+        env:
+          OIDC_ISSUER_URL: ${{ vars.OIDC_ISSUER_URL }}
+          OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+          PUBLIC_EDGE_API_BASE_URL: ${{ vars.PUBLIC_EDGE_API_BASE_URL }}
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+          TRUSTED_PROXY_CIDRS: ${{ vars.TRUSTED_PROXY_CIDRS }}
+          DATABASE_CIDRS: ${{ vars.DATABASE_CIDRS }}
+          REDIS_CIDRS: ${{ vars.REDIS_CIDRS }}
+          OIDC_ALLOWED_EMAIL_DOMAIN: ${{ vars.OIDC_ALLOWED_EMAIL_DOMAIN }}
+        run: |
+          : "${OIDC_ISSUER_URL:?OIDC_ISSUER_URL is required on the protected environment}"
+          : "${OIDC_CLIENT_ID:?OIDC_CLIENT_ID is required on the protected environment}"
+          : "${PUBLIC_EDGE_API_BASE_URL:?PUBLIC_EDGE_API_BASE_URL is required on the protected environment}"
+          : "${PUBLIC_HOST:?PUBLIC_HOST is required on the protected environment}"
+          : "${TRUSTED_PROXY_CIDRS:?TRUSTED_PROXY_CIDRS is required on the protected environment}"
+          : "${DATABASE_CIDRS:?DATABASE_CIDRS is required on the protected environment}"
+          : "${REDIS_CIDRS:?REDIS_CIDRS is required on the protected environment}"
+          : "${OIDC_ALLOWED_EMAIL_DOMAIN:?OIDC_ALLOWED_EMAIL_DOMAIN is required on the protected environment}"
+          case "$OIDC_ALLOWED_EMAIL_DOMAIN" in example.com|invalid.invalid|'*') echo 'OIDC_ALLOWED_EMAIL_DOMAIN must be an explicit production allowlist' >&2; exit 1;; esac
+          test "${#OIDC_ALLOWED_EMAIL_DOMAIN}" -le 253
+          printf '%s' "$OIDC_ALLOWED_EMAIL_DOMAIN" | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$'
+          python3 - <<'PY'
+          import ipaddress
+          import os
+          import re
+          import urllib.parse
+
+          issuer = urllib.parse.urlsplit(os.environ["OIDC_ISSUER_URL"])
+          public_api = urllib.parse.urlsplit(os.environ["PUBLIC_EDGE_API_BASE_URL"])
+          public_host = os.environ["PUBLIC_HOST"]
+          allowed_email_domain = os.environ["OIDC_ALLOWED_EMAIL_DOMAIN"].lower()
+          def is_reserved(hostname: str) -> bool:
+              labels = hostname.lower().rstrip(".").split(".")
+              return (
+                  labels[-1] in {"example", "invalid", "localhost", "test"}
+                  or hostname.lower() in {"example.com", "example.net", "example.org"}
+                  or hostname.lower().endswith((".example.com", ".example.net", ".example.org"))
+              )
+          if not re.fullmatch(r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}", public_host):
+              raise SystemExit("PUBLIC_HOST must be an explicit DNS hostname")
+          for name, parsed in (("OIDC_ISSUER_URL", issuer), ("PUBLIC_EDGE_API_BASE_URL", public_api)):
+              if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+                  raise SystemExit(f"{name} must be a credential-free HTTPS URL without query or fragment")
+              try:
+                  if parsed.port not in (None, 443):
+                      raise SystemExit(f"{name} must use the default HTTPS port")
+              except ValueError as error:
+                  raise SystemExit(f"{name} has an invalid port") from error
+          if public_api.hostname != public_host or public_api.path not in ("", "/"):
+              raise SystemExit("PUBLIC_EDGE_API_BASE_URL must be the origin for PUBLIC_HOST")
+          if is_reserved(public_host) or is_reserved(issuer.hostname or "") or is_reserved(allowed_email_domain):
+              raise SystemExit("protected deployment cannot use reserved example/test/invalid domains")
+          def validate_cidrs(name: str, reject_loopback_sentinel: bool = False) -> None:
+              cidrs = [value.strip() for value in os.environ[name].split(",")]
+              if not cidrs or len(cidrs) > 16 or any(not value for value in cidrs) or len(cidrs) != len(set(cidrs)):
+                  raise SystemExit(f"{name} must contain 1-16 unique CIDRs")
+              for value in cidrs:
+                  try:
+                      network = ipaddress.ip_network(value, strict=True)
+                  except ValueError as error:
+                      raise SystemExit(f"{name} contains an invalid or non-canonical CIDR") from error
+                  if network.version != 4:
+                      raise SystemExit(f"{name} must contain IPv4 CIDRs supported by this release policy")
+                  if network.prefixlen == 0 or (reject_loopback_sentinel and value == "127.0.0.1/32"):
+                      raise SystemExit(f"{name} contains a wildcard or fail-closed sentinel")
+          validate_cidrs("TRUSTED_PROXY_CIDRS", reject_loopback_sentinel=True)
+          validate_cidrs("DATABASE_CIDRS")
+          validate_cidrs("REDIS_CIDRS")
+          PY
+      - name: Atomic Helm deployment by digest
+        env:
+          RELEASE_NAMESPACE: ${{ vars.RELEASE_NAMESPACE || 'greenroute' }}
+          RUNTIME_SECRET_NAME: ${{ vars.RUNTIME_SECRET_NAME || 'greenroute-runtime' }}
+          OIDC_ISSUER_URL: ${{ vars.OIDC_ISSUER_URL }}
+          OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+          PUBLIC_EDGE_API_BASE_URL: ${{ vars.PUBLIC_EDGE_API_BASE_URL }}
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+          TRUSTED_PROXY_CIDRS: ${{ vars.TRUSTED_PROXY_CIDRS }}
+          DATABASE_CIDRS: ${{ vars.DATABASE_CIDRS }}
+          REDIS_CIDRS: ${{ vars.REDIS_CIDRS }}
+          OIDC_ALLOWED_EMAIL_DOMAIN: ${{ vars.OIDC_ALLOWED_EMAIL_DOMAIN }}
+        run: |
+          set -euo pipefail
+          values="deploy/helm/greenroute/values-${{ inputs.environment }}.yaml"
+          edge_digest=$(cat dist/release-edge-api/digest.txt)
+          orchestrator_digest=$(cat dist/release-routing-orchestrator/digest.txt)
+          provider_digest=$(cat dist/release-provider-yandex/digest.txt)
+          web_digest=$(cat dist/release-web/digest.txt)
+          oauth2_proxy_digest=$(cat dist/release-oauth2-proxy/digest.txt)
+          database_cidrs_json=$(CIDR_INPUT="$DATABASE_CIDRS" python3 -c 'import json, os; print(json.dumps([value.strip() for value in os.environ["CIDR_INPUT"].split(",")]))')
+          redis_cidrs_json=$(CIDR_INPUT="$REDIS_CIDRS" python3 -c 'import json, os; print(json.dumps([value.strip() for value in os.environ["CIDR_INPUT"].split(",")]))')
+          required_secret_keys='DATABASE_URL REDIS_URL OAUTH2_PROXY_REDIS_URL INTERNAL_API_TOKEN AUDIT_HASH_KEY ABUSE_HASH_KEY YANDEX_ROUTER_API_KEY OAUTH2_PROXY_CLIENT_SECRET OAUTH2_PROXY_COOKIE_SECRET'
+          available_secret_keys=$(kubectl -n "$RELEASE_NAMESPACE" get secret "$RUNTIME_SECRET_NAME" -o go-template='{{range $key, $_ := .data}}{{$key}}{{"\n"}}{{end}}')
+          for key in $required_secret_keys; do
+            printf '%s\n' "$available_secret_keys" | grep -Fxq "$key" || { echo "runtime Secret is missing required key $key" >&2; exit 1; }
+          done
+          helm_args=(
+            --namespace "$RELEASE_NAMESPACE"
+            --values "$values"
+            --set-string "images.edgeApi.repository=$REGISTRY/$GITHUB_REPOSITORY/edge-api"
+            --set-string "images.edgeApi.digest=$edge_digest"
+            --set-string "images.routingOrchestrator.repository=$REGISTRY/$GITHUB_REPOSITORY/routing-orchestrator"
+            --set-string "images.routingOrchestrator.digest=$orchestrator_digest"
+            --set-string "images.providerYandex.repository=$REGISTRY/$GITHUB_REPOSITORY/provider-yandex"
+            --set-string "images.providerYandex.digest=$provider_digest"
+            --set-string "images.web.repository=$REGISTRY/$GITHUB_REPOSITORY/web"
+            --set-string "images.web.digest=$web_digest"
+            --set-string "images.oauth2Proxy.repository=$REGISTRY/$GITHUB_REPOSITORY/oauth2-proxy"
+            --set-string "images.oauth2Proxy.digest=$oauth2_proxy_digest"
+            --set-string "secrets.existingSecret=$RUNTIME_SECRET_NAME"
+            --set-literal "config.oidcIssuerUrl=$OIDC_ISSUER_URL"
+            --set-literal "config.oidcClientId=$OIDC_CLIENT_ID"
+            --set-literal "config.edgePublicUrl=$PUBLIC_EDGE_API_BASE_URL"
+            --set-literal "config.corsAllowedOrigins=$PUBLIC_EDGE_API_BASE_URL"
+            --set-literal "config.trustedProxyCIDRs=$TRUSTED_PROXY_CIDRS"
+            --set-json "networkPolicy.databaseCIDRs=$database_cidrs_json"
+            --set-json "networkPolicy.redisCIDRs=$redis_cidrs_json"
+            --set-literal "authProxy.allowedEmailDomains[0]=$OIDC_ALLOWED_EMAIL_DOMAIN"
+            --set-literal "ingress.host=$PUBLIC_HOST"
+          )
+          rendered="$RUNNER_TEMP/greenroute-rendered-release.yaml"
+          helm template greenroute deploy/helm/greenroute "${helm_args[@]}" > "$rendered"
+          python3 tools/assert-rendered-call-graph.py "$rendered" --require-image-digests
+          kubectl apply --namespace "$RELEASE_NAMESPACE" --server-side --dry-run=server \
+            --field-manager=greenroute-release-policy-check -f "$rendered" >/dev/null
+          helm upgrade --install greenroute deploy/helm/greenroute "${helm_args[@]}" \
+            --atomic --wait --timeout 10m --history-max 10
+      - name: Verify release readiness
+        env:
+          RELEASE_NAMESPACE: ${{ vars.RELEASE_NAMESPACE || 'greenroute' }}
+        run: helm status greenroute --namespace "$RELEASE_NAMESPACE" --show-resources

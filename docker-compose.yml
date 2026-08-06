@@ -1,0 +1,419 @@
+name: greenroute
+
+x-app-common: &app-common
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local,service.namespace=greenroute
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_TRACES_EXPORTER: otlp
+
+services:
+  postgres:
+    image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: greenroute
+      POSTGRES_USER: greenroute
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenroute-local-only}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greenroute -d greenroute"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [database]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", "60", "1000"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - redis-data:/data
+    networks: [redis]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  provider-yandex:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: services/provider-yandex/Dockerfile
+    image: greenroute/provider-yandex:0.1.0-local
+    environment:
+      <<: *otel-env
+      HTTP_ADDR: :8082
+      PROVIDER_ADDR: :8082
+      APP_ENV: local
+      LOG_LEVEL: info
+      INTERNAL_API_TOKEN: greenroute-local-internal-token-32chars
+      OTEL_SERVICE_NAME: provider-yandex
+      PROVIDER_MODE: ${PROVIDER_MODE:-stub}
+      ADDRESS_PROVIDER_MODE: ${ADDRESS_PROVIDER_MODE:-auto}
+      PROVIDER_STUB_SCENARIO: ${PROVIDER_STUB_SCENARIO:-normal}
+      PROVIDER_STUB_DELAY: ${PROVIDER_STUB_DELAY:-4s}
+      PROVIDER_DATA_STORAGE_ALLOWED: "false"
+      PROVIDER_DATA_MODIFICATION_ALLOWED: "false"
+      ALLOW_EXPERIMENTAL_PROVIDER_SOURCES: "false"
+      YANDEX_ROUTER_BASE_URL: https://api.routing.yandex.net
+      YANDEX_ROUTER_API_KEY: ${YANDEX_ROUTER_API_KEY:-}
+      YANDEX_GEOCODER_BASE_URL: https://geocode-maps.yandex.ru
+      YANDEX_GEOCODER_API_KEY: ${YANDEX_GEOCODER_API_KEY:-}
+      DGIS_API_KEY: ${DGIS_API_KEY:-}
+      DGIS_ROUTING_BASE_URL: https://routing.api.2gis.com
+      DGIS_MAX_RESULTS: ${DGIS_MAX_RESULTS:-3}
+      DGIS_RATE_LIMIT_PER_MINUTE: ${DGIS_RATE_LIMIT_PER_MINUTE:-12}
+      DGIS_MONTHLY_LIMIT: ${DGIS_MONTHLY_LIMIT:-1000}
+      DGIS_GEOCODER_RATE_LIMIT_PER_MINUTE: ${DGIS_GEOCODER_RATE_LIMIT_PER_MINUTE:-600}
+      DGIS_GEOCODER_LOCATION_BIAS: ${DGIS_GEOCODER_LOCATION_BIAS:-37.617635,55.755814}
+      PROVIDER_REQUEST_TIMEOUT: 2500ms
+      PROVIDER_CONNECT_TIMEOUT: 500ms
+      PROVIDER_RESPONSE_HEADER_TIMEOUT: 2s
+      PROVIDER_BULKHEAD_WAIT_TIMEOUT: 100ms
+      PROVIDER_MAX_RETRIES: "2"
+      PROVIDER_RETRY_BASE_DELAY: 100ms
+      PROVIDER_RETRY_MAX_DELAY: 1s
+      PROVIDER_MAX_CONCURRENCY: "32"
+      PROVIDER_CB_FAILURE_THRESHOLD: "5"
+      PROVIDER_CB_OPEN_DURATION: 30s
+      PROVIDER_SHUTDOWN_TIMEOUT: 10s
+      PROVIDER_MAX_REQUEST_BODY_BYTES: "131072"
+      PROVIDER_MAX_RESPONSE_BYTES: "4194304"
+      PROVIDER_COST_PER_BILLABLE_UNIT: "0"
+      YANDEX_MAX_RESULTS: "3"
+    expose: ["8082"]
+    healthcheck:
+      test: ["CMD", "/app/provider-yandex", "healthcheck", "--url", "http://127.0.0.1:8082/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [internal, telemetry, provider-egress]
+
+  routing-orchestrator:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: services/routing-orchestrator/Dockerfile
+    image: greenroute/routing-orchestrator:0.1.0-local
+    environment:
+      <<: *otel-env
+      HTTP_ADDR: :8081
+      ORCHESTRATOR_ADDR: :8081
+      APP_ENV: local
+      LOG_LEVEL: info
+      INTERNAL_API_TOKEN: greenroute-local-internal-token-32chars
+      OTEL_SERVICE_NAME: routing-orchestrator
+      PROVIDER_URL: http://provider-yandex:8082
+      REDIS_URL: redis://redis:6379/0
+      REQUIRE_REDIS: "false"
+      ENABLE_ENHANCED_SEARCH: "true"
+      ENABLE_AVOID_ZONE_GENERATION: "true"
+      ENABLE_CORRIDOR_ANCHORS: "true"
+      ENABLE_ROUTE_RERANKING: "true"
+      ENABLE_LIVE_REROUTING: "false"
+      ENABLE_PROVIDER_CACHE: "false"
+      PROVIDER_DATA_STORAGE_ALLOWED: "false"
+      PROVIDER_DATA_MODIFICATION_ALLOWED: "false"
+      ENABLE_ADMIN_DEBUG_DETAILS: "false"
+      SEARCH_STATE_TTL: 30m
+      MAX_ACTIVE_CANDIDATES: "12"
+      MAX_CONCURRENT_SEARCHES: "64"
+      MAX_ENHANCED_ITERATIONS: "5"
+      MINIMUM_SCORE_IMPROVEMENT: "0.02"
+      SSE_HEARTBEAT_INTERVAL: 15s
+      SHUTDOWN_GRACE_PERIOD: 20s
+    expose: ["8081"]
+    healthcheck:
+      test: ["CMD", "/app/routing-orchestrator", "healthcheck", "--url", "http://127.0.0.1:8081/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    depends_on:
+      redis:
+        condition: service_healthy
+      provider-yandex:
+        condition: service_healthy
+    networks: [internal, redis, telemetry]
+
+  edge-api:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: services/edge-api/Dockerfile
+    image: greenroute/edge-api:0.1.0-local
+    environment:
+      <<: *otel-env
+      HTTP_ADDR: :8080
+      EDGE_ADDR: :8080
+      APP_ENV: local
+      LOG_LEVEL: info
+      INTERNAL_API_TOKEN: greenroute-local-internal-token-32chars
+      OTEL_SERVICE_NAME: edge-api
+      ORCHESTRATOR_URL: http://routing-orchestrator:8081
+      PROVIDER_URL: http://provider-yandex:8082
+      DATABASE_URL: postgres://greenroute:${POSTGRES_PASSWORD:-greenroute-local-only}@postgres:5432/greenroute?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      ENABLE_ANONYMOUS_USAGE: "true"
+      ENABLE_LOCAL_ANONYMOUS_ADMIN: "true"
+      REQUIRE_REDIS: "false"
+      REQUIRE_DATABASE: "false"
+      ENABLE_ADMIN_DEBUG_DETAILS: "false"
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      TRUSTED_PROXY_CIDRS: ""
+      RATE_LIMIT_IP_PER_MINUTE: "60"
+      RATE_LIMIT_USER_PER_MINUTE: "120"
+      RATE_LIMIT_SEARCH_PER_MINUTE: "12"
+      MAX_CONCURRENT_EDGE_REQUESTS: "256"
+      MAX_CONCURRENT_SSE: "64"
+      MAX_SSE_PER_PRINCIPAL: "3"
+      SSE_MAX_LIFETIME: 30m
+      SSE_IDLE_TIMEOUT: 45s
+      IDEMPOTENCY_TTL: 15m
+      SEARCH_OWNERSHIP_TTL: 30m
+      SHUTDOWN_GRACE_PERIOD: 20s
+      AUDIT_RETENTION: 2160h
+      AUDIT_PURGE_INTERVAL: 24h
+      AUDIT_HASH_KEY: greenroute-local-audit-hash-key-32chars
+      ABUSE_HASH_KEY: greenroute-local-abuse-hash-key-32chars
+      ABUSE_PREVIOUS_HASH_KEY: ""
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "/app/edge-api", "healthcheck", "--url", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      routing-orchestrator:
+        condition: service_healthy
+    networks: [frontend, internal, database, redis, telemetry]
+
+  web:
+    <<: *app-common
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+    image: greenroute/web:0.1.0-local
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      NEXT_PUBLIC_EDGE_API_BASE_URL: http://localhost:8080
+      NEXT_PUBLIC_YANDEX_MAPS_API_KEY: ${NEXT_PUBLIC_YANDEX_MAPS_API_KEY:-}
+      NEXT_PUBLIC_2GIS_MAPGL_API_KEY: ${NEXT_PUBLIC_2GIS_MAPGL_API_KEY:-${TWO_GIS_API_KEY:-}}
+      NEXT_PUBLIC_DEMO_MODE: "false"
+      GREENROUTE_PROVIDER_MODE: ${PROVIDER_MODE:-stub}
+      GREENROUTE_ADDRESS_PROVIDER_MODE: ${ADDRESS_PROVIDER_MODE:-auto}
+      GREENROUTE_YANDEX_GEOCODER_CONFIGURED: ${YANDEX_GEOCODER_API_KEY:+true}
+      GREENROUTE_YANDEX_GEOSUGGEST_CONFIGURED: ${YANDEX_GEOSUGGEST_API_KEY:+true}
+      GREENROUTE_DGIS_CONFIGURED: ${DGIS_API_KEY:+true}
+      GREENROUTE_YANDEX_TRAFFIC_AVAILABLE: ${GREENROUTE_YANDEX_TRAFFIC_AVAILABLE:-false}
+      GREENROUTE_ADMIN_ENABLED: ${GREENROUTE_ADMIN_ENABLED:-false}
+      GREENROUTE_ADMIN_IN_MENU: ${GREENROUTE_ADMIN_IN_MENU:-false}
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      edge-api:
+        condition: service_healthy
+    networks: [frontend]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0@sha256:1ab0baba0ee3695d823c46653d8a6e8894896e668ce8bd7ebe002e948d827bc7
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    expose: ["4317", "4318", "8888", "8889", "13133"]
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/config.yaml"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    networks: [telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: prom/prometheus:v3.4.1@sha256:9abc6cf6aea7710d163dbb28d8eeb7dc5baef01e38fa4cd146a406dd9f07f70d
+    profiles: [observability]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "/bin/promtool", "check", "config", "/etc/prometheus/prometheus.yml"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+  tempo:
+    image: grafana/tempo:2.8.1@sha256:bc9245fe3da4e63dc4c6862d9c2dad9bcd8be13d0ba4f7705fa6acda4c904d0e
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/config.yaml:ro
+      - tempo-data:/var/tempo
+    expose: ["3200", "4317", "4318"]
+    healthcheck:
+      test: ["CMD", "/tempo", "-version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+  loki:
+    image: grafana/loki:3.5.1@sha256:a74594532eec4cc313401beedc4dd2708c43674c032084b1aeb87c14a5be1745
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    expose: ["3100"]
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:12.0.2@sha256:b5b59bfc7561634c2d7b136c4543d702ebcc94a3da477f21ff26f89ffd4214fa
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-greenroute-local-only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: "false"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    networks: [telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+  k6:
+    image: grafana/k6:0.54.0@sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755
+    profiles: [load]
+    environment:
+      BASE_URL: http://edge-api:8080
+    volumes:
+      - ./tests/load:/scripts:ro
+      - ./dist/load:/results
+    working_dir: /scripts
+    networks: [frontend, telemetry]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  frontend:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+  database:
+    driver: bridge
+    internal: true
+  redis:
+    driver: bridge
+    internal: true
+  telemetry:
+    driver: bridge
+    internal: true
+  provider-egress:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  tempo-data:
+  loki-data:
