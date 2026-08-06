@@ -15,9 +15,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const [input, originLabel, destinationLabel] = process.argv.slice(2);
+const [input, originLabel, destinationLabel, primaryIndex = "0"] = process.argv.slice(2);
 if (!input || !originLabel || !destinationLabel) {
-  throw new Error('usage: anonymise-bookmark.mjs <bookmark.json> "<from>" "<to>"');
+  throw new Error('usage: anonymise-bookmark.mjs <bookmark.json> "<from>" "<to>" [primary-index]');
 }
 
 // Far enough that the ends land on a through road rather than a driveway.
@@ -63,14 +63,20 @@ function trimRoute(route) {
   return { ...route, geometry, segments };
 }
 
-const bookmark = JSON.parse(readFileSync(input, "utf8")).entries[0];
-if (!bookmark) throw new Error("the export contains no bookmark");
-const source = bookmark.result;
+const entries = JSON.parse(readFileSync(input, "utf8")).entries ?? [];
+if (entries.length === 0) throw new Error("the export contains no bookmark");
+// The primary analysis is what the demo opens with; the rest become its saved
+// bookmarks, so more than one story is reachable without a provider call.
+const order = [Number(primaryIndex), ...entries.keys()].filter((index, position, all) =>
+  Number.isInteger(index) && index >= 0 && index < entries.length && all.indexOf(index) === position);
 
 const trim = (route) => (route ? trimRoute(route) : route);
-const result = {
+
+function anonymise(bookmark, id) {
+  const source = bookmark.result;
+  const result = {
   ...source,
-  searchId: "demo-frozen-analysis",
+  searchId: id,
   requestId: randomUUID(),
   selectedRoute: trim(source.selectedRoute),
   greenTopRoutes: (source.greenTopRoutes ?? []).map(trim),
@@ -79,12 +85,12 @@ const result = {
   fastestReferenceRoute: trim(source.fastestReferenceRoute),
   // The demo must not expire: it is a frozen exhibit, not a live answer.
   expiresAt: "2099-01-01T00:00:00.000Z",
-};
+  };
 
-const anchor = result.greenTopRoutes[0] ?? result.bestEffortRoutes[0];
-if (!anchor) throw new Error("the bookmark carries no routes");
-const constraints = source.constraints ?? {};
-const request = bookmark.request ?? {
+  const anchor = result.greenTopRoutes[0] ?? result.bestEffortRoutes[0];
+  if (!anchor) throw new Error("a bookmark carries no routes");
+  const constraints = source.constraints ?? {};
+  const request = bookmark.request ?? {
   requestId: result.requestId,
   origin: anchor.geometry[0],
   destination: anchor.geometry[anchor.geometry.length - 1],
@@ -99,14 +105,12 @@ const request = bookmark.request ?? {
   strictness: 0.82,
   maxProviderRequests: 8,
   searchDeadlineMs: 20_000,
-};
+  };
+  return { result, request, labels: { origin: originLabel, destination: destinationLabel }, capturedAt: source.generatedAt };
+}
 
-const payload = {
-  result,
-  request,
-  labels: { origin: originLabel, destination: destinationLabel },
-  capturedAt: source.generatedAt,
-};
+const shaped = order.map((index, position) => anonymise(entries[index], position === 0 ? "demo-frozen-analysis" : `demo-frozen-${position}`));
+const payload = { ...shaped[0], extra: shaped.slice(1) };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.PROBOK_ROOT ?? resolve(here, "..", "..");
@@ -114,7 +118,7 @@ const text = JSON.stringify(payload);
 writeFileSync(join(repoRoot, "apps", "web", "public", "demo", "analysis.json"), text, "utf8");
 writeFileSync(join(repoRoot, "tools", "docs-media", "demo-analysis.json"), text, "utf8");
 
-const summary = result.greenTopRoutes.map((route) => {
+const summary = payload.result.greenTopRoutes.map((route) => {
   const total = route.liveDurationSeconds;
   const metrics = route.metrics ?? {};
   return {
@@ -130,9 +134,10 @@ console.log(JSON.stringify({
   origin: payload.labels.origin,
   destination: payload.labels.destination,
   routes: summary,
-  reference: result.fastestReferenceRoute && {
-    minutes: Math.round(result.fastestReferenceRoute.liveDurationSeconds / 60),
-    km: +(result.fastestReferenceRoute.distanceMeters / 1000).toFixed(1),
-    red: `${Math.round((result.fastestReferenceRoute.metrics?.redDurationSeconds ?? 0) / 60)} min`,
+  reference: payload.result.fastestReferenceRoute && {
+    minutes: Math.round(payload.result.fastestReferenceRoute.liveDurationSeconds / 60),
+    km: +(payload.result.fastestReferenceRoute.distanceMeters / 1000).toFixed(1),
+    red: `${Math.round((payload.result.fastestReferenceRoute.metrics?.redDurationSeconds ?? 0) / 60)} min`,
   },
+  alsoSaved: payload.extra.length,
 }, null, 2));

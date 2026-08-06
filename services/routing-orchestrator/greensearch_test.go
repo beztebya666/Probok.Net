@@ -238,3 +238,51 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+func TestCorridorPlansProposeAWayRoundWhenNothingIsCongested(t *testing.T) {
+	// The cluster ladder needs congestion to react to. On an already-green route
+	// it produces nothing, and without a corridor hypothesis the search would
+	// accept the first corridor it was handed and never look for a greener one.
+	request := domain.RouteSearchRequest{
+		Origin:                 domain.GeoPoint{Latitude: 55.692, Longitude: 37.663},
+		Destination:            domain.GeoPoint{Latitude: 55.694, Longitude: 37.327},
+		MaxExtraDistanceMeters: 150_000,
+	}
+	plans := greenDetourPlans(nil, request, true, true, 4)
+	if len(plans) != 0 {
+		t.Fatalf("no clusters must still mean no cluster plans, got %d", len(plans))
+	}
+
+	corridor := corridorPlans(request, 4)
+	if len(corridor) < 2 {
+		t.Fatalf("expected corridor plans on both sides, got %d", len(corridor))
+	}
+	span := geometry.DistanceMeters(request.Origin, request.Destination)
+	for _, plan := range corridor {
+		if len(plan.anchors) != 1 {
+			t.Fatalf("a corridor plan is a single anchor, got %d", len(plan.anchors))
+		}
+		offset := geometry.DistanceMeters(plan.anchors[0], domain.GeoPoint{
+			Latitude:  (request.Origin.Latitude + request.Destination.Latitude) / 2,
+			Longitude: (request.Origin.Longitude + request.Destination.Longitude) / 2,
+		})
+		// Wide enough to reach an orbital road, and never wider than the ceiling.
+		if offset < minCorridorOffsetMeters || offset > maxLateralOffsetMeters+1 {
+			t.Fatalf("anchor %v sits %.0f m off the middle of a %.0f m trip", plan.anchors[0], offset, span)
+		}
+	}
+}
+
+func TestCorridorPlansRespectTheDetourAllowance(t *testing.T) {
+	request := domain.RouteSearchRequest{
+		Origin:                 domain.GeoPoint{Latitude: 55.692, Longitude: 37.663},
+		Destination:            domain.GeoPoint{Latitude: 55.694, Longitude: 37.327},
+		MaxExtraDistanceMeters: 2_000,
+	}
+	// Half of a two-kilometre allowance is far below the corridor floor, so a
+	// user who accepts almost no detour is not sent around the city — and no
+	// provider request is spent asking.
+	if plans := corridorPlans(request, 4); len(plans) != 0 {
+		t.Fatalf("a small allowance must not produce corridor plans, got %d", len(plans))
+	}
+}

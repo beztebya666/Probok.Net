@@ -23,9 +23,16 @@ const (
 	clusterZoneBufferMeters  = 160
 	clusterMergeMeters       = 420
 	endpointProtectionMeters = 700
-	maxZonesPerPlan          = 6
-	maxLateralOffsetMeters   = 12_000
-	minLateralOffsetMeters   = 400
+	maxZonesPerPlan          = 12
+	// How far sideways a single anchor may be placed. A ring road sits ten to
+	// twenty kilometres out from a city centre, and the old 12 km ceiling meant
+	// the search could never reach one deliberately — however much detour the
+	// user had allowed.
+	maxLateralOffsetMeters = 25_000
+	minLateralOffsetMeters = 400
+	// Below this an anchor off the middle of the trip is not a corridor, only a
+	// nudge the lateral plans already make.
+	minCorridorOffsetMeters = 3_000
 )
 
 // congestionCluster is one contiguous non-green stretch observed on at least
@@ -240,6 +247,86 @@ func lateralAnchor(cluster congestionCluster, offsetMeters float64, side int) (d
 	return anchor, true
 }
 
+// offsetPoint moves a point sideways from a heading, which is how every anchor
+// in this file is placed.
+func offsetPoint(from domain.GeoPoint, heading float64, offsetMeters float64, side int) (domain.GeoPoint, bool) {
+	perpendicular := heading + math.Pi/2*float64(side)
+	anchor := domain.GeoPoint{
+		Latitude:  from.Latitude + metersToLatitude(offsetMeters*math.Sin(perpendicular)),
+		Longitude: from.Longitude + metersToLongitude(offsetMeters*math.Cos(perpendicular), from.Latitude),
+	}
+	if anchor.Validate() != nil {
+		return domain.GeoPoint{}, false
+	}
+	return anchor, true
+}
+
+// corridorPlans asks a question the cluster ladder cannot: "is there a greener
+// way round the whole city?"
+//
+// Every other plan is a reaction to congestion that was already observed, so on
+// a route that is mostly green it produces nothing and the search stops with the
+// first corridor it was given — even when a different corridor would have been
+// greener still. These anchors are placed off the middle of the trip itself, at
+// ring-road distances, and describe no particular road: whatever orbital or
+// bypass exists between A and B is what the provider will use to reach them.
+func corridorPlans(request domain.RouteSearchRequest, anchorCapacity int) []detourPlan {
+	if anchorCapacity < 1 {
+		return nil
+	}
+	middle := domain.GeoPoint{
+		Latitude:  (request.Origin.Latitude + request.Destination.Latitude) / 2,
+		Longitude: (request.Origin.Longitude + request.Destination.Longitude) / 2,
+	}
+	heading := math.Atan2(
+		request.Destination.Latitude-request.Origin.Latitude,
+		(request.Destination.Longitude-request.Origin.Longitude)*math.Cos(radians(middle.Latitude)),
+	)
+	span := geometry.DistanceMeters(request.Origin, request.Destination)
+	plans := make([]detourPlan, 0, 4)
+	for _, offset := range corridorOffsets(request, span) {
+		for _, side := range []int{1, -1} {
+			anchor, ok := offsetPoint(middle, heading, offset, side)
+			if !ok {
+				continue
+			}
+			direction := "LEFT"
+			if side < 0 {
+				direction = "RIGHT"
+			}
+			plans = append(plans, detourPlan{
+				label:   fmt.Sprintf("CORRIDOR_%s_%dM", direction, int(offset)),
+				anchors: []domain.GeoPoint{anchor},
+			})
+		}
+	}
+	return plans
+}
+
+// corridorOffsets are wide by design: a quarter to half the trip's own length,
+// bounded by what the user allowed and by the sideways ceiling. Below the floor
+// it would not be a corridor at all, only a nudge the lateral plans already
+// make — and it would spend a provider request to repeat them.
+func corridorOffsets(request domain.RouteSearchRequest, spanMeters float64) []float64 {
+	allowance := float64(request.MaxExtraDistanceMeters)
+	if allowance <= 0 {
+		return nil
+	}
+	offsets := make([]float64, 0, 2)
+	for _, fraction := range []float64{0.25, 0.5} {
+		offset := math.Min(maxLateralOffsetMeters, math.Min(spanMeters*fraction, allowance/2))
+		if offset < minCorridorOffsetMeters {
+			continue
+		}
+		offset = math.Round(offset)
+		if len(offsets) > 0 && math.Abs(offsets[len(offsets)-1]-offset) < 500 {
+			continue
+		}
+		offsets = append(offsets, offset)
+	}
+	return offsets
+}
+
 func lateralOffsets(request domain.RouteSearchRequest) []float64 {
 	// The user's own detour allowance is the search radius. Someone who accepts
 	// +150 km wants the search to look far off-corridor; someone who accepts
@@ -336,6 +423,14 @@ func greenDetourPlans(
 	if zonesAllowed && (request.RoutingMode == domain.RoutingModeStrictGreen || len(redOrange) == 0) {
 		if zones := zonesFor(clusters, maxZonesPerPlan); len(zones) > 0 {
 			add(detourPlan{label: fmt.Sprintf("AVOID_EVERY_NON_GREEN_%d", len(zones)), zones: zones})
+		}
+	}
+
+	// Tried after the local reactions and before the relaxation tail: a wide
+	// corridor is a different answer, not a weaker version of the same one.
+	if anchorsAllowed {
+		for _, plan := range corridorPlans(request, anchorCapacity) {
+			add(plan)
 		}
 	}
 

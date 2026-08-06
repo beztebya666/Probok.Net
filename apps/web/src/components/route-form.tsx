@@ -51,6 +51,8 @@ type Props = {
   // The demo build opens with a finished analysis; the planner should show the
   // trip it belongs to instead of two blank fields.
   initialRoute?: { key: string; origin: LocationValue; destination: LocationValue } | undefined;
+  // Saved routes written after this component mounted, e.g. by the demo seed.
+  seededPresets?: RoutePreset[] | undefined;
 };
 
 function safeLocalStorage(): Storage | undefined {
@@ -71,7 +73,7 @@ function uuid(): string {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
-export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTrafficProviderChange, status, onRouteLabelChange, bookmarks, activeSearchId, onOpenBookmark, onRemoveBookmark, initialRoute }: Props) {
+export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTrafficProviderChange, status, onRouteLabelChange, bookmarks, activeSearchId, onOpenBookmark, onRemoveBookmark, initialRoute, seededPresets }: Props) {
   const { t } = useLocale();
   // Derived rather than remounted: the form used to be rebuilt whenever a saved
   // analysis was opened, which threw away the tab the user was standing on.
@@ -370,8 +372,8 @@ export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTraff
       {status}
 
       <RoutePresets
-        entries={routePresets}
-        ready={routePresetsReady}
+        entries={seededPresets && routePresets.length === 0 ? seededPresets : routePresets}
+        ready={routePresetsReady || Boolean(seededPresets?.length)}
         disabled={formDisabled}
         onRestore={restorePreset}
         onToggleFavorite={(id) => persistPresets((current) => toggleRoutePresetFavorite(current, id))}

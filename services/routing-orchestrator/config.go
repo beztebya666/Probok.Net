@@ -83,7 +83,7 @@ func loadConfig() (config, error) {
 	if c.MaxConcurrentSearches, err = envInt("MAX_CONCURRENT_SEARCHES", 64); err != nil {
 		return config{}, err
 	}
-	if c.MaxEnhancedIterations, err = envInt("MAX_ENHANCED_ITERATIONS", 5); err != nil {
+	if c.MaxEnhancedIterations, err = envInt("MAX_ENHANCED_ITERATIONS", 8); err != nil {
 		return config{}, err
 	}
 	if c.MinimumScoreImprovement, err = envFloat("MINIMUM_SCORE_IMPROVEMENT", 0.02); err != nil {

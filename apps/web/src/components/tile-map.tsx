@@ -177,7 +177,9 @@ export function TileMap({
       aria-label={label}
       aria-hidden={hidden}
       onPointerDown={(event) => {
-        if (event.button !== 0) return;
+        // A press on the zoom control is a click, not the start of a pan: the
+        // container used to capture the pointer and swallow the button.
+        if (event.button !== 0 || (event.target as HTMLElement).closest(".tile-map-zoom")) return;
         drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
         setDragging(true);
         event.currentTarget.setPointerCapture(event.pointerId);

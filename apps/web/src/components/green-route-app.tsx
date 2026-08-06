@@ -5,9 +5,11 @@ import { useLocale } from "@/lib/i18n";
 import {
   parseTrafficProvider,
   initialTrafficProvider,
+  readRoutePresets,
   readTrafficProvider,
   TRAFFIC_PROVIDER_STORAGE_KEY,
   writeTrafficProvider,
+  type RoutePreset,
   type TrafficProvider,
 } from "@/lib/route-presets";
 import {
@@ -55,6 +57,7 @@ export function GreenRouteApp() {
   // Counts searches rather than flags one, so a second search re-announces the
   // demo instead of being swallowed by a toast that is already fading.
   const [demoNotices, setDemoNotices] = useState(0);
+  const [seededPresets, setSeededPresets] = useState<RoutePreset[] | undefined>(undefined);
   // What the planner should show: set when an analysis is opened from a saved
   // list, so the form matches the result on screen instead of sitting empty.
   const [plannerRoute, setPlannerRoute] = useState<{ key: string; origin: LocationValue; destination: LocationValue } | undefined>(undefined);
@@ -106,6 +109,7 @@ export function GreenRouteApp() {
       // see when all three tabs are empty.
       seedDemoLists(preload, safeLocalStorage(), Date.now());
       setBookmarks(readRouteBookmarks(safeLocalStorage()));
+      setSeededPresets(readRoutePresets(safeLocalStorage()));
       setTrafficProvider(readTrafficProvider(safeLocalStorage()));
       if (preload.origin && preload.destination) {
         setRouteLabel(`${preload.origin} → ${preload.destination}`);
@@ -289,6 +293,7 @@ export function GreenRouteApp() {
             // The preload arrives after the first render, and initial state is
             // only read once; remounting is what makes it visible.
             {...(plannerRoute ? { initialRoute: plannerRoute } : {})}
+            {...(seededPresets?.length ? { seededPresets } : {})}
             onSubmit={(request) => { setLastRequest(request); setRefreshing(undefined); announceDemo(); return start(request); }}
             onRouteLabelChange={setRouteLabel}
             bookmarks={bookmarks}

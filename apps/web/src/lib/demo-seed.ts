@@ -72,16 +72,18 @@ function seedPresets(preload: DemoPreload, storage: Storage, now: number): void 
 
 function seedBookmarks(preload: DemoPreload, storage: Storage, now: number): void {
   if (readRouteBookmarks(storage).length > 0) return;
-  const bookmark: RouteBookmark = {
-    id: preload.result.searchId,
-    label: `${preload.origin} → ${preload.destination}`,
-    savedAt: now,
-    routingMode: preload.request.routingMode,
-    result: preload.result,
-    request: preload.request,
-    ...(preload.result.greenTopRoutes[0]
-      ? { selectedCandidateId: preload.result.greenTopRoutes[0].candidateId }
+  const analyses = [preload, ...preload.extra];
+  const bookmarks: RouteBookmark[] = analyses.map((analysis, index) => ({
+    id: analysis.result.searchId,
+    label: `${analysis.origin} → ${analysis.destination}`,
+    // Ordered so the open analysis is the newest of the saved ones.
+    savedAt: now - index * 60 * 60 * 1000,
+    routingMode: analysis.request.routingMode,
+    result: analysis.result,
+    request: analysis.request,
+    ...(analysis.result.greenTopRoutes[0]
+      ? { selectedCandidateId: analysis.result.greenTopRoutes[0].candidateId }
       : {}),
-  };
-  writeRouteBookmarks([bookmark], storage);
+  }));
+  writeRouteBookmarks(bookmarks, storage);
 }
