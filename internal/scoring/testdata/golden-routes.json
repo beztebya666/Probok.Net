@@ -1,0 +1,98 @@
+[
+  {
+    "name": "short route with severe congestion versus longer free route",
+    "mode": "GREENEST",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"short-heavy","distance":10000,"live":1200,"baseline":600,"similarity":1,"offset":0.00},
+      {"id":"long-free","distance":13000,"live":1250,"baseline":1200,"similarity":1,"offset":0.02}
+    ],
+    "selected": "long-free"
+  },
+  {
+    "name": "long entirely free route wins strict mode",
+    "mode": "STRICT_GREEN",
+    "maxExtraDistanceMeters": 10000,
+    "maxExtraTimeSeconds": 1200,
+    "candidates": [
+      {"id":"direct-orange","distance":9000,"live":900,"baseline":600,"similarity":1,"offset":0.00},
+      {"id":"outer-green","distance":15000,"live":1050,"baseline":1000,"similarity":1,"offset":0.03}
+    ],
+    "selected": "outer-green",
+    "rejected": ["direct-orange"]
+  },
+  {
+    "name": "long route with one smaller red zone",
+    "mode": "STRICT_GREEN",
+    "maxExtraDistanceMeters": 6000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"direct-red","distance":10000,"live":1000,"baseline":500,"similarity":1,"offset":0.00},
+      {"id":"detour-small-red","distance":14000,"live":1100,"baseline":800,"similarity":1,"offset":0.02}
+    ],
+    "selected": "",
+    "rejected": ["direct-red", "detour-small-red"]
+  },
+  {
+    "name": "unknown segments never count as green",
+    "mode": "GREENEST",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"known-yellow","distance":10000,"live":1000,"baseline":850,"similarity":1,"offset":0.00},
+      {"id":"unknown-short","distance":9000,"live":900,"baseline":0,"similarity":0.1,"offset":0.02}
+    ],
+    "selected": "known-yellow",
+    "rejected": ["unknown-short"]
+  },
+  {
+    "name": "free route beyond allowed detour is rejected",
+    "mode": "GREENEST",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"within-limit-red","distance":10000,"live":1000,"baseline":500,"similarity":1,"offset":0.00},
+      {"id":"too-long-green","distance":15001,"live":1100,"baseline":1050,"similarity":1,"offset":0.03}
+    ],
+    "selected": "within-limit-red",
+    "rejected": ["too-long-green"]
+  },
+  {
+    "name": "equivalent provider routes are deduplicated",
+    "mode": "FASTEST",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "dedupe": true,
+    "candidates": [
+      {"id":"duplicate-slow","distance":10000,"live":1000,"baseline":850,"similarity":1,"offset":0.00},
+      {"id":"duplicate-fast","distance":10020,"live":900,"baseline":800,"similarity":1,"offset":0.0001}
+    ],
+    "selected": "duplicate-fast",
+    "deduplicated": 1
+  },
+  {
+    "name": "baseline geometry mismatch lowers confidence",
+    "mode": "GREENEST",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"known-orange","distance":10000,"live":1000,"baseline":700,"similarity":1,"offset":0.00},
+      {"id":"mismatch-apparently-free","distance":11000,"live":950,"baseline":930,"similarity":0.2,"offset":0.04}
+    ],
+    "selected": "known-orange",
+    "rejected": ["mismatch-apparently-free"]
+  },
+  {
+    "name": "no free option chooses least red honestly",
+    "mode": "STRICT_GREEN",
+    "maxExtraDistanceMeters": 5000,
+    "maxExtraTimeSeconds": 600,
+    "candidates": [
+      {"id":"more-red","distance":10000,"live":1000,"baseline":500,"similarity":1,"offset":0.00},
+      {"id":"less-red","distance":12000,"live":1100,"baseline":700,"similarity":1,"offset":0.02}
+    ],
+    "selected": "",
+    "rejected": ["more-red", "less-red"]
+  }
+]
