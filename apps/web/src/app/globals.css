@@ -1380,6 +1380,26 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(
 @keyframes pop-in { from { opacity: 0; transform: translateY(4px); } }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px); } }
 
+.route-green-share {
+  display: grid;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  gap: 1px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.route-green-share strong { font-size: 13px; }
+.route-green-share small { color: var(--ink-2); font-size: 10px; }
+.route-green-share:disabled { cursor: default; }
+.route-green-share.is-active { background: var(--accent-soft, var(--surface-3)); border-color: var(--accent); }
+@media (hover: hover) {
+  .route-green-share:hover:not(:disabled) { border-color: var(--line-strong); }
+}
+.badge-rank { color: var(--ink-2); background: var(--surface-3); }
+
 /* ============================ Keyless map ================================ */
 
 .tile-map { position: absolute; inset: 0; overflow: hidden; background: var(--map-fallback-bg); cursor: grab; touch-action: none; }

@@ -54,6 +54,9 @@ function RouteCard({
   recommended,
   fastest,
   greenest,
+  rank,
+  preview,
+  onPreview,
   onSelect,
 }: {
   route: RouteCandidate;
@@ -62,6 +65,10 @@ function RouteCard({
   recommended: boolean;
   fastest: boolean;
   greenest: boolean;
+  // Position in the green ranking, which is what the list is sorted by.
+  rank?: number | undefined;
+  preview?: boolean | undefined;
+  onPreview?: (() => void) | undefined;
   onSelect: () => void;
 }) {
   const { locale, t } = useLocale();
@@ -74,6 +81,7 @@ function RouteCard({
     <article className={`route-card ${selected ? "is-selected" : ""}`} data-testid={`route-card-${route.candidateId}`}>
       <div className="route-card-top">
         <div className="route-badges">
+          {rank !== undefined && !fastest && <span className="badge badge-rank">#{rank}</span>}
           {recommended && <span className="badge badge-recommended">{t("recommended")}</span>}
           {fastest && <span className="badge">{t("fastest")}</span>}
           {greenest && !recommended && <span className="badge badge-green">{t("greenest")}</span>}
@@ -82,6 +90,18 @@ function RouteCard({
           <span aria-hidden="true" />{t(`confidence_${route.confidence.level}`)} · {Math.round(route.confidence.score * 100)}%
         </span>
       </div>
+
+      {/* The ranking criterion, on the thing being ranked. */}
+      <button
+        type="button"
+        className={`route-green-share ${preview ? "is-active" : ""}`}
+        onClick={onPreview}
+        disabled={!onPreview}
+        title={onPreview ? t("showOnMap") : undefined}
+      >
+        <strong>{t("greenShareTime", { value: greenTimePercent(route) })}</strong>
+        <small>{t("greenShareDistance", { value: greenDistancePercent(route) })}</small>
+      </button>
 
       <div className="route-primary-metrics">
         <div><ClockIcon /><span><strong>{formatDuration(route.liveDurationSeconds, locale)}</strong><small>{t("eta")}</small></span></div>
@@ -134,74 +154,6 @@ function RouteCard({
   );
 }
 
-/**
- * The green podium is proof of search, not a recommendation. It lists what the
- * search actually found ordered by measured green share, including routes the
- * active mode rejects, so an empty strict result is never an empty screen.
- */
-function GreenPodium({
-  routes,
-  previewCandidateId,
-  onPreview,
-  measuredAt,
-}: {
-  routes: RouteCandidate[];
-  previewCandidateId?: string | undefined;
-  onPreview?: ((candidateId: string) => void) | undefined;
-  // Percentages are a snapshot of the traffic at search time, never recomputed,
-  // so the moment they describe is stated next to them.
-  measuredAt?: string | undefined;
-}) {
-  const { locale, t } = useLocale();
-  if (routes.length === 0) return null;
-
-  return (
-    <section className="green-podium" aria-labelledby="green-podium-title" data-testid="green-podium">
-      <div className="green-podium-heading">
-        <strong id="green-podium-title">{t("greenTopTitle")}</strong>
-        <p>{t("greenTopSubtitle")}</p>
-      </div>
-      <ol className="green-podium-list">
-        {routes.map((route, index) => (
-          <li key={route.candidateId} className={previewCandidateId === route.candidateId ? "is-active" : ""}>
-            <button
-              type="button"
-              className={`green-podium-row ${previewCandidateId === route.candidateId ? "is-active" : ""}`}
-              data-testid={`green-rank-${index + 1}`}
-              aria-pressed={previewCandidateId === route.candidateId}
-              title={t("showOnMap")}
-              onClick={() => onPreview?.(route.candidateId)}
-            >
-              <span className="green-podium-rank">{t("greenRank", { value: index + 1 })}</span>
-              <span className="green-podium-share">
-                <strong>{t("greenShareTime", { value: greenTimePercent(route) })}</strong>
-                <small>{t("greenShareDistance", { value: greenDistancePercent(route) })}</small>
-              </span>
-              <span className="green-podium-bar" aria-hidden="true">
-                {route.segments.map((segment) => (
-                  <i
-                    key={segment.segmentId}
-                    className={`flow-${segment.congestionClass.toLowerCase()}`}
-                    style={{ flexGrow: Math.max(1, segment.distanceMeters) }}
-                  />
-                ))}
-              </span>
-              <span className="green-podium-meta">
-                {formatDuration(route.liveDurationSeconds, locale)} · {formatDistance(route.distanceMeters, locale)}
-              </span>
-            </button>
-            {previewCandidateId === route.candidateId && <ExternalRouteLinks route={route} compact />}
-          </li>
-        ))}
-      </ol>
-      <p className="green-podium-hint">
-        {measuredAt && <strong>{t("measuredAt", { value: measuredAt })} </strong>}
-        {t("greenTopHint")}
-      </p>
-    </section>
-  );
-}
-
 export function RouteResults({
   result,
   routingMode,
@@ -232,7 +184,9 @@ export function RouteResults({
 }) {
   const { locale, t } = useLocale();
   const routes = useMemo(() => routeCandidatesForMode(result, routingMode), [result, routingMode]);
-  const greenPodium = useMemo(() => greenRankedRoutes(result), [result]);
+  // Everything the search found, best green share first. In the strict mode the
+  // list is what did not qualify, which is more use than an empty panel.
+  const ranked = useMemo(() => greenRankedRoutes(result, 3), [result]);
   const measuredAt = useMemo(() => {
     const stamp = Date.parse(result.generatedAt);
     return Number.isFinite(stamp) ? new Date(stamp).toLocaleString(locale) : undefined;
@@ -241,9 +195,17 @@ export function RouteResults({
   const greenest = findGreenest(routes);
   const reference = result.fastestReferenceRoute ?? [...routes].sort((a, b) => a.liveDurationSeconds - b.liveDurationSeconds)[0];
   const recommendedId = result.selectedRoute?.candidateId;
-  const ordered = [...routes].sort((a, b) => {
-    const priority = (route: RouteCandidate) => route.candidateId === recommendedId ? 0 : route.candidateId === greenest?.candidateId ? 1 : route.candidateId === reference?.candidateId ? 2 : 3;
-    return priority(a) - priority(b) || b.score - a.score;
+  // Green share is the ranking this product is about, so it is the order of the
+  // list; the reference route trails it as the thing being compared against.
+  // Strict mode must never present the fast route as an answer, so when nothing
+  // qualifies the fallback list shows the candidates without it (ADR-014).
+  const listed = routes.length > 0
+    ? routes
+    : ranked.filter((route) => !strictGreenUnavailable || route.candidateId !== reference?.candidateId);
+  const ordered = [...listed].sort((a, b) => {
+    if (a.candidateId === reference?.candidateId) return 1;
+    if (b.candidateId === reference?.candidateId) return -1;
+    return greenTimePercent(b) - greenTimePercent(a) || a.liveDurationSeconds - b.liveDurationSeconds;
   });
   const degraded = result.status === "DEGRADED" || result.warnings.some((warning) => ["PROVIDER_DEGRADED", "GREEN_OPTIMIZATION_UNAVAILABLE"].includes(warning.code));
 
@@ -265,7 +227,7 @@ export function RouteResults({
               <RefreshIcon />
             </button>
           )}
-          {onSaveBookmark && greenPodium.length > 0 && (
+          {onSaveBookmark && ordered.length > 0 && (
             <button
               className={`results-bookmark ${bookmarked ? "is-saved" : ""}`}
               type="button"
@@ -295,7 +257,15 @@ export function RouteResults({
       </div>
 
 
-      <GreenPodium routes={greenPodium} previewCandidateId={previewCandidateId} onPreview={onPreview} measuredAt={measuredAt} />
+      {strictGreenUnavailable && (
+        <div className="notice notice-warning" role="status" data-testid="strict-green-empty">
+          <AlertIcon />
+          <div>
+            <strong>{t("strictEmptyTitle")}</strong>
+            <p>{t("strictEmptyBody")}</p>
+          </div>
+        </div>
+      )}
 
       {!strictGreenUnavailable && degraded && (
         <div className="notice notice-warning" role="status"><AlertIcon /><div><strong>{t("degradedTitle")}</strong><p>{t("degradedBody")}</p></div></div>
@@ -309,7 +279,7 @@ export function RouteResults({
       )}
 
       <div className="route-list">
-        {ordered.map((route) => (
+        {ordered.map((route, index) => (
           <RouteCard
             key={route.candidateId}
             route={route}
@@ -318,10 +288,20 @@ export function RouteResults({
             recommended={route.candidateId === recommendedId}
             fastest={route.candidateId === reference?.candidateId}
             greenest={route.candidateId === greenest?.candidateId}
+            rank={index + 1}
+            preview={previewCandidateId === route.candidateId}
+            {...(onPreview ? { onPreview: () => onPreview(route.candidateId) } : {})}
             onSelect={() => onSelect(route.candidateId)}
           />
         ))}
       </div>
+
+      {measuredAt && ordered.length > 0 && (
+        <p className="green-podium-hint">
+          <strong>{t("measuredAt", { value: measuredAt })} </strong>
+          {t("greenTopHint")}
+        </p>
+      )}
     </section>
   );
 }

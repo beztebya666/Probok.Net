@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LocaleProvider } from "@/lib/i18n";
@@ -33,7 +33,7 @@ describe("RouteResults", () => {
     expect(screen.getByText("Рекомендуем")).toBeInTheDocument();
     expect(screen.getAllByText(/Высокая|Средняя/).length).toBeGreaterThan(0);
     const fastest = screen.getByTestId("route-card-route-fastest");
-    await userEvent.click(fastest.querySelector("button")!);
+    await userEvent.click(within(fastest).getByRole("button", { name: /Выбрать/ }));
     expect(select).toHaveBeenCalledWith("route-fastest");
   });
 
@@ -48,11 +48,11 @@ describe("RouteResults", () => {
       </LocaleProvider>,
     );
 
-    expect(screen.queryByTestId("route-card-route-fastest")).not.toBeInTheDocument();
     expect(screen.queryByText("Самый быстрый")).not.toBeInTheDocument();
+    expect(screen.getByTestId("strict-green-empty")).toHaveTextContent("Полностью зелёного маршрута не нашлось");
   });
 
-  it("proves what the search found with a green podium even when strict mode selects nothing", async () => {
+  it("still lists what the search found when strict mode qualifies nothing", async () => {
     createDemoSearch(request);
     const result = getDemoSearch(`demo-${request.requestId}`, true);
     result.selectedRoute = null;
@@ -64,27 +64,30 @@ describe("RouteResults", () => {
       </LocaleProvider>,
     );
 
-    const podium = screen.getByTestId("green-podium");
-    expect(podium).toHaveTextContent("Топ-3 по зелени");
-    const first = screen.getByTestId("green-rank-1");
-    expect(first).toHaveTextContent(/%\s*времени по зелёному/);
+    const cards = screen.getAllByTestId(/^route-card-/);
+    expect(cards.length).toBeGreaterThan(0);
+    const share = cards[0]!.querySelector(".route-green-share");
+    expect(share).toHaveTextContent(/%\s*времени по зелёному/);
 
-    await userEvent.click(first);
+    await userEvent.click(share as HTMLElement);
     expect(preview).toHaveBeenCalledTimes(1);
     expect(preview.mock.calls[0]![0]).toEqual(expect.any(String));
   });
 
-  it("orders the podium by green share, best first", () => {
+  it("orders the routes by green share, best first, with the reference last", () => {
     createDemoSearch(request);
     const result = getDemoSearch(`demo-${request.requestId}`, true);
 
     render(<LocaleProvider><RouteResults result={result} routingMode="GREENEST" onSelect={vi.fn()} /></LocaleProvider>);
 
-    const shares = [1, 2, 3]
-      .map((rank) => screen.queryByTestId(`green-rank-${rank}`))
-      .filter((row): row is HTMLElement => Boolean(row))
-      .map((row) => Number(/(\d+)%/.exec(row.querySelector("strong")?.textContent ?? "")?.[1] ?? "0"));
-    expect(shares.length).toBeGreaterThan(1);
-    expect([...shares].sort((a, b) => b - a)).toEqual(shares);
+    const cards = screen.getAllByTestId(/^route-card-/);
+    const reference = cards.findIndex((card) => card.textContent?.includes("Самый быстрый"));
+    const green = cards
+      .filter((card) => !card.textContent?.includes("Самый быстрый"))
+      .map((card) => Number(/(\d+)%/.exec(card.querySelector(".route-green-share strong")?.textContent ?? "")?.[1] ?? "0"));
+    expect(green.length).toBeGreaterThan(1);
+    expect([...green].sort((a, b) => b - a)).toEqual(green);
+    // The route being compared against belongs at the end of the comparison.
+    if (reference >= 0) expect(reference).toBe(cards.length - 1);
   });
 });
