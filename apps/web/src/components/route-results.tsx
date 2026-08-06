@@ -164,12 +164,10 @@ export function RouteResults({
   const ordered = [...listed].sort((a, b) => {
     if (a.candidateId === reference?.candidateId) return 1;
     if (b.candidateId === reference?.candidateId) return -1;
-    const share = greenTimePercent(b) - greenTimePercent(a);
-    // Within a point of each other the two are the same answer, so the one that
-    // costs nothing goes first.
-    if (Math.abs(share) > 1) return share;
-    if (a.tolls !== b.tolls) return a.tolls ? 1 : -1;
-    return a.liveDurationSeconds - b.liveDurationSeconds;
+    // Green share decides the order, full stop. A toll is shown on the card so
+    // the choice is informed, but it does not reorder anything: the product
+    // ranks by how much of the drive is free-flowing, not by what it costs.
+    return greenTimePercent(b) - greenTimePercent(a) || a.liveDurationSeconds - b.liveDurationSeconds;
   });
   // Most warnings are engineering telemetry: billing estimates, provider
   // bookkeeping, codes with no translation. The panel keeps the few that change
