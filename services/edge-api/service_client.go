@@ -79,7 +79,7 @@ func (c *serviceClient) startSearch(ctx context.Context, requestID, operationKey
 	if err != nil {
 		return 0, nil, domain.RouteSearchResult{}, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 	if err != nil {
 		return 0, nil, domain.RouteSearchResult{}, errUpstreamUnavailable
@@ -102,7 +102,7 @@ func (c *serviceClient) getSearch(ctx context.Context, requestID, searchID strin
 	if err != nil {
 		return 0, nil, domain.RouteSearchResult{}, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
 	if err != nil {
 		return 0, nil, domain.RouteSearchResult{}, errUpstreamUnavailable
@@ -122,7 +122,7 @@ func (c *serviceClient) deleteSearch(ctx context.Context, requestID, searchID st
 	if err != nil {
 		return 0, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 	return response.StatusCode, nil
 }
@@ -147,7 +147,7 @@ func (c *serviceClient) geosuggest(ctx context.Context, requestID, query, langua
 	if err != nil {
 		return 0, nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	return response.StatusCode, body, err
 }
@@ -157,7 +157,7 @@ func (c *serviceClient) adminOverview(ctx context.Context, requestID string) (in
 	if err != nil {
 		return 0, nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	return response.StatusCode, body, err
 }
@@ -167,7 +167,7 @@ func (c *serviceClient) health(ctx context.Context, base *url.URL) error {
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return errUpstreamUnavailable
 	}

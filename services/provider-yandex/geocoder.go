@@ -33,7 +33,7 @@ func (r *yandexAddressResolver) Suggest(ctx context.Context, query, language str
 
 func (r *yandexAddressResolver) Ready() error {
 	if r.adapter.cfg.YandexGeocoderAPIKey == "" {
-		return errors.New("Yandex geocoder credentials are not configured")
+		return errors.New("credentials for the Yandex geocoder are not configured")
 	}
 	if r.adapter.credentialFault.Failed() {
 		return errCredentialFault

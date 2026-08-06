@@ -1,0 +1,15 @@
+# Secret scanning configuration.
+#
+# The default rule set is kept in full; this file only records the places where
+# a match is provably not a secret. Every entry names the file and the exact
+# shape it is allowed to match, so a real credential in the same file would
+# still be reported.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Idempotency-Key is a request de-duplication label, not a credential. The smoke test sends a fixed one so a re-run is recognised as the same request."
+condition = "AND"
+paths = ['''tools/integration-smoke\.sh''']
+regexes = ['''^integration-smoke-\d+$''']

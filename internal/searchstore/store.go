@@ -393,8 +393,12 @@ func (s *Redis) ActiveBefore(ctx context.Context, before time.Time, limit int) (
 	if limit > 1000 {
 		limit = 1000
 	}
-	ids, err := s.client.ZRangeByScore(ctx, s.activeKey(), &redis.ZRangeBy{
-		Min: "-inf", Max: fmt.Sprintf("%d", before.UnixMilli()), Count: int64(limit),
+	ids, err := s.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     s.activeKey(),
+		ByScore: true,
+		Start:   "-inf",
+		Stop:    fmt.Sprintf("%d", before.UnixMilli()),
+		Count:   int64(limit),
 	}).Result()
 	if err != nil || len(ids) == 0 {
 		return []domain.RouteSearchResult{}, err

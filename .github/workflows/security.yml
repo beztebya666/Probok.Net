@@ -73,7 +73,7 @@ jobs:
       - name: Secret history and worktree scan
         run: >-
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.0@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9
-          detect --source=/repo --no-banner --redact
+          detect --source=/repo --config=/repo/.gitleaks.toml --no-banner --redact
       - name: Filesystem vulnerability and misconfiguration scan
         run: >-
           docker run --rm -v "$PWD:/repo" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
