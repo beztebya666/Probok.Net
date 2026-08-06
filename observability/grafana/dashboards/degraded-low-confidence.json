@@ -1,0 +1,64 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum(rate(low_confidence_results_total[$__rate_interval])) / clamp_min(sum(rate(route_search_total[$__rate_interval])), 0.000001)", "legendFormat": "low confidence", "refId": "A"}],
+      "title": "Low-confidence result ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum(rate(route_search_total{status=\"DEGRADED\"}[$__rate_interval])) / clamp_min(sum(rate(route_search_total[$__rate_interval])), 0.000001)", "legendFormat": "degraded", "refId": "A"}],
+      "title": "Degraded search ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "sum(rate(low_confidence_results_total[$__rate_interval]))", "legendFormat": "low confidence", "refId": "A"}],
+      "title": "Low-confidence result rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum(rate(no_green_route_total[$__rate_interval]))", "legendFormat": "no green route", "refId": "A"}, {"expr": "sum(rate(search_budget_exhausted_total[$__rate_interval]))", "legendFormat": "budget exhausted", "refId": "B"}],
+      "title": "Degradation signals",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 5,
+      "options": {"dedupStrategy": "signature", "enableLogDetails": true, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"expr": "{service_namespace=\"greenroute\"} | json | status=\"DEGRADED\"", "refId": "A"}],
+      "title": "Degraded search events (coordinates redacted)",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["greenroute", "confidence", "degraded"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "GreenRoute — Low Confidence and Degraded Searches",
+  "uid": "greenroute-degraded-confidence",
+  "version": 1
+}

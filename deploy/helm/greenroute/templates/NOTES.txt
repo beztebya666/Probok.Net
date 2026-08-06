@@ -1,0 +1,24 @@
+GreenRoute {{ .Chart.AppVersion }} has been rendered for {{ .Values.global.environment }}.
+
+Public endpoint:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}/
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "greenroute.fullname" . }}-web 3000:3000
+{{- end }}
+
+Required pre-existing secret: {{ .Values.secrets.existingSecret }}
+Required production keys are DATABASE_URL, REDIS_URL, OAUTH2_PROXY_REDIS_URL, INTERNAL_API_TOKEN, AUDIT_HASH_KEY, ABUSE_HASH_KEY, OAUTH2_PROXY_CLIENT_SECRET, OAUTH2_PROXY_COOKIE_SECRET and the active routing credential: YANDEX_ROUTER_API_KEY in yandex mode or DGIS_API_KEY in 2gis mode.
+ABUSE_PREVIOUS_HASH_KEY is optional and is populated only during a controlled pseudonymization-key rotation overlap.
+OIDC issuer/client ID are non-secret configuration used by the session gateway and bearer-token validation. Register https://{{ .Values.ingress.host }}/oauth2/callback at the IdP and replace the fail-closed authProxy.allowedEmailDomains placeholder. The browser maps key is optional and must be origin-restricted.
+Set config.trustedProxyCIDRs to the exact ingress-controller source CIDRs before exposing the service through a reverse proxy.
+YANDEX_GEOCODER_API_KEY is optional only when address suggestion/resolution is not offered; do not assume the Router key grants Geocoder entitlement.
+
+The chart never creates secret values. Provision the secret with External Secrets, Sealed Secrets, SOPS or the platform secret manager before installation.
+
+Reference values use explicit non-latest version tags, but tags are not treated as immutable. A release pipeline must set each images.*.digest to the signed sha256 manifest digest; when supplied, the digest takes precedence over the tag. Multi-architecture manifest digests differ from per-platform image digests, so admission policy and signing must use the same digest form as the deployed image reference.
+
+Operational checks:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "greenroute.fullname" . }}-edge-api
+  kubectl -n {{ .Release.Namespace }} get pods,svc,ingress,hpa,pdb
+  kubectl -n {{ .Release.Namespace }} get networkpolicy,servicemonitor,prometheusrule

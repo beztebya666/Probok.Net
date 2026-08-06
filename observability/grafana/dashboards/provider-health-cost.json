@@ -1,0 +1,63 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum by (operation) (rate(provider_requests_total[$__rate_interval]))", "legendFormat": "{{operation}}", "refId": "A"}],
+      "title": "Provider request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "histogram_quantile(0.50, sum by (le, operation) (rate(provider_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50 {{operation}}", "refId": "A"}, {"expr": "histogram_quantile(0.95, sum by (le, operation) (rate(provider_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95 {{operation}}", "refId": "B"}],
+      "title": "Provider request latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "sum(rate(provider_errors_total[$__rate_interval]))", "legendFormat": "all provider errors", "refId": "A"}, {"expr": "sum(rate(provider_429_total[$__rate_interval]))", "legendFormat": "429", "refId": "B"}],
+      "title": "Provider errors and throttling",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "max(provider_circuit_breaker_state)", "refId": "A"}],
+      "title": "Circuit breaker state",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "sum(increase(estimated_provider_cost_total[$__range]))", "refId": "A"}],
+      "title": "Estimated provider cost in range",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["greenroute", "provider", "cost"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "GreenRoute — Provider Health and Cost",
+  "uid": "greenroute-provider-health-cost",
+  "version": 1
+}

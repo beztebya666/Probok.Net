@@ -1,0 +1,16 @@
+{
+  "policyVersion": "greenroute-scoring-v1.0.0",
+  "greenMaxTrafficRatio": 1.15,
+  "yellowMaxTrafficRatio": 1.35,
+  "orangeMaxTrafficRatio": 1.65,
+  "minimumGeometrySimilarity": 0.72,
+  "minimumRouteConfidence": 0.35,
+  "unknownHighConfidenceMaxPercent": 5,
+  "unknownMediumConfidenceMaxPercent": 25,
+  "balancedTrafficWeight": 0.40,
+  "balancedEtaWeight": 0.25,
+  "balancedDistanceWeight": 0.15,
+  "balancedUncertaintyWeight": 0.15,
+  "balancedTollWeight": 0.05,
+  "greenestExtraTimePenalty": 0.15
+}

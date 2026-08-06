@@ -1,0 +1,307 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-default-deny
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-dns
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.selectorLabels" . | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-public-ingress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [edge-api, web]
+    matchLabels:
+      {{- include "greenroute.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+        - {protocol: TCP, port: 3000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-metrics-ingress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.monitoring.namespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+        - {protocol: TCP, port: 8081}
+        - {protocol: TCP, port: 8082}
+        - {protocol: TCP, port: 3000}
+        {{- if .Values.authProxy.enabled }}
+        - {protocol: TCP, port: 44180}
+        {{- end }}
+{{- if .Values.authProxy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4180}
+  egress:
+    - to:
+        {{- range .Values.networkPolicy.redisCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 6379}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.identityEgressCIDR }}
+            except:
+              {{- toYaml .Values.networkPolicy.providerDeniedCIDRs | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 443}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-edge-egress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "edge-api") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "routing-orchestrator") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8081}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "provider-yandex") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8082}
+    - to:
+        {{- range .Values.networkPolicy.databaseCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 5432}
+    - to:
+        {{- range .Values.networkPolicy.redisCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 6379}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.observability.namespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4318}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.identityEgressCIDR }}
+            except:
+              {{- toYaml .Values.networkPolicy.providerDeniedCIDRs | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 443}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-edge-internal-ingress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "edge-api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "web") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-orchestrator
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "routing-orchestrator") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "edge-api") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8081}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "provider-yandex") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8082}
+    - to:
+        {{- range .Values.networkPolicy.redisCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 6379}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.observability.namespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4318}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-provider
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "provider-yandex") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "routing-orchestrator") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "edge-api") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8082}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.providerEgressCIDR }}
+            except:
+              {{- toYaml .Values.networkPolicy.providerDeniedCIDRs | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.observability.namespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4318}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-web-egress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "web") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list . "edge-api") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "greenroute.fullname" . }}-migration-egress
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "migration") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- range .Values.networkPolicy.databaseCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 5432}
+{{- end }}

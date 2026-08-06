@@ -1,0 +1,197 @@
+{{- if .Values.authProxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+spec:
+  replicas: {{ .Values.authProxy.replicas }}
+  revisionHistoryLimit: {{ .Values.global.revisionHistoryLimit }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "greenroute.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ .Values.global.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        {{- range .Values.topologySpreadConstraints }}
+        - maxSkew: {{ .maxSkew }}
+          topologyKey: {{ .topologyKey }}
+          whenUnsatisfiable: {{ .whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "greenroute.componentSelectorLabels" (list $ "oauth2-proxy") | nindent 14 }}
+        {{- end }}
+      containers:
+        - name: oauth2-proxy
+          image: {{ include "greenroute.image" (list . .Values.authProxy.image) | quote }}
+          imagePullPolicy: {{ (index .Values.images .Values.authProxy.image).pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          args:
+            - --http-address=0.0.0.0:4180
+            - --metrics-address=0.0.0.0:44180
+            - --provider=oidc
+            - {{ printf "--oidc-issuer-url=%s" .Values.config.oidcIssuerUrl | quote }}
+            - {{ printf "--client-id=%s" .Values.config.oidcClientId | quote }}
+            - --scope=openid profile email groups
+            - --oidc-groups-claim=groups
+            - --oidc-enabled-signing-alg=RS256
+            - --oidc-enabled-signing-alg=ES256
+            - --code-challenge-method=S256
+            - --insecure-oidc-allow-unverified-email=false
+            - --insecure-oidc-skip-issuer-verification=false
+            - --insecure-oidc-skip-nonce=false
+            {{- range .Values.authProxy.allowedEmailDomains }}
+            - {{ printf "--email-domain=%s" . | quote }}
+            {{- end }}
+            - {{ printf "--redirect-url=https://%s/oauth2/callback" .Values.ingress.host | quote }}
+            - {{ printf "--whitelist-domain=%s" .Values.ingress.host | quote }}
+            - --proxy-prefix=/oauth2
+            - --upstream=static://202
+            - --reverse-proxy=true
+            - --real-client-ip-header=X-Forwarded-For
+            {{- range $cidr := splitList "," .Values.config.trustedProxyCIDRs }}
+            {{- if (trim $cidr) }}
+            - {{ printf "--trusted-proxy-ip=%s" (trim $cidr) | quote }}
+            {{- end }}
+            {{- end }}
+            - --force-https=true
+            - --skip-provider-button=true
+            - --set-authorization-header=true
+            - --set-xauthrequest=true
+            - --pass-basic-auth=false
+            - --session-store-type=redis
+            - --cookie-name=__Host-greenroute_session
+            - --cookie-path=/
+            - --cookie-secure=true
+            - --cookie-httponly=true
+            - --cookie-samesite=lax
+            - {{ printf "--cookie-expire=%s" .Values.authProxy.cookieExpire | quote }}
+            - {{ printf "--cookie-refresh=%s" .Values.authProxy.cookieRefresh | quote }}
+            - --cookie-csrf-per-request=true
+            - {{ printf "--cookie-csrf-expire=%s" .Values.authProxy.csrfExpire | quote }}
+            - --cookie-csrf-samesite=lax
+            - {{ printf "--cookie-csrf-per-request-limit=%v" .Values.authProxy.csrfCookiesPerRequestLimit | quote }}
+            - --request-logging=false
+            - --auth-logging=false
+            - --standard-logging=true
+            - --silence-ping-logging=true
+            - --show-debug-on-error=false
+          env:
+            - name: HOME
+              value: /tmp
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.keys.oauth2ClientSecret }}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.keys.oauth2CookieSecret }}
+            - name: OAUTH2_PROXY_REDIS_CONNECTION_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.keys.oauth2RedisUrl }}
+          ports:
+            - {name: http, containerPort: 4180, protocol: TCP}
+            - {name: metrics, containerPort: 44180, protocol: TCP}
+          startupProbe:
+            httpGet: {path: /ping, port: http}
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 1
+          livenessProbe:
+            httpGet: {path: /ping, port: http}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            failureThreshold: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.authProxy.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 32Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 4 }}
+  ports:
+    - {name: http, port: 4180, targetPort: http, protocol: TCP}
+    - {name: metrics, port: 44180, targetPort: metrics, protocol: TCP}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 6 }}
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "greenroute.fullname" . }}-oauth2-proxy
+  labels:
+    {{- include "greenroute.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames: [{{ .Release.Namespace }}]
+  selector:
+    matchLabels:
+      {{- include "greenroute.componentSelectorLabels" (list . "oauth2-proxy") | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+      honorLabels: false
+      relabelings:
+        - targetLabel: service
+          replacement: oauth2-proxy
+{{- end }}
+{{- end }}

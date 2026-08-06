@@ -1,0 +1,63 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum(rate(candidates_generated_total[$__rate_interval]))", "legendFormat": "generated", "refId": "A"}, {"expr": "sum(rate(candidates_deduplicated_total[$__rate_interval]))", "legendFormat": "deduplicated", "refId": "B"}],
+      "title": "Candidate generation and deduplication",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum(rate(green_route_found_total[$__rate_interval])) / clamp_min(sum(rate(route_search_total[$__rate_interval])), 0.000001)", "legendFormat": "green found", "refId": "A"}, {"expr": "sum(rate(no_green_route_total[$__rate_interval])) / clamp_min(sum(rate(route_search_total[$__rate_interval])), 0.000001)", "legendFormat": "no green route", "refId": "B"}],
+      "title": "Route quality outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "m"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "histogram_quantile(0.50, sum by (le) (rate(selected_route_extra_distance_meters_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A"}, {"expr": "histogram_quantile(0.95, sum by (le) (rate(selected_route_extra_distance_meters_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B"}],
+      "title": "Selected route extra distance",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "histogram_quantile(0.50, sum by (le) (rate(selected_route_red_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A"}, {"expr": "histogram_quantile(0.95, sum by (le) (rate(selected_route_red_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B"}],
+      "title": "Selected route red duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "sum(rate(search_budget_exhausted_total[$__rate_interval])) / clamp_min(sum(rate(route_search_total[$__rate_interval])), 0.000001)", "refId": "A"}],
+      "title": "Search budget exhaustion ratio",
+      "type": "gauge"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["greenroute", "routing", "quality"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "GreenRoute — Routing Quality",
+  "uid": "greenroute-routing-quality",
+  "version": 1
+}

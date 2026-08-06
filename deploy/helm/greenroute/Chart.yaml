@@ -1,0 +1,13 @@
+apiVersion: v2
+name: greenroute
+description: Production Helm chart for the GreenRoute routing platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial hardened microservice deployment.
