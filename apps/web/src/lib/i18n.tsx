@@ -83,7 +83,7 @@ const ru = {
   showOnMap: "Показать на карте",
   openRouteIn: "Открыть в",
   open2gis: "2ГИС",
-  openYandex: "Яндексе",
+  openYandex: "Яндекс",
   themeToDark: "Тёмная тема",
   themeToLight: "Светлая тема",
   restoredResult: "Предыдущий результат",

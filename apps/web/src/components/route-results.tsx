@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { reasonLabel, useLocale, warningLabel } from "@/lib/i18n";
+import { useLocale, warningLabel } from "@/lib/i18n";
 import {
 	congestionSeconds,
   estimatedFreePercent,
@@ -12,7 +12,6 @@ import {
   displayedRoutes,
   greenTimePercent,
   isVerifiedAllGreenRoute,
-  unknownPercent,
 } from "@/lib/route-insights";
 import { twoGisRouteUrl, yandexRouteUrl } from "@/lib/external-links";
 import type { RouteCandidate, RouteSearchResult, RoutingMode } from "@/lib/schemas";
@@ -48,7 +47,6 @@ function ExternalRouteLinks({ route, compact }: { route: RouteCandidate; compact
 
 function RouteCard({
   route,
-  reference,
   selected,
   recommended,
   fastest,
@@ -59,7 +57,6 @@ function RouteCard({
   onSelect,
 }: {
   route: RouteCandidate;
-  reference?: RouteCandidate | undefined;
   selected: boolean;
   recommended: boolean;
   fastest: boolean;
@@ -71,13 +68,6 @@ function RouteCard({
   onSelect: () => void;
 }) {
   const { locale, t } = useLocale();
-  const extraDistance = Math.max(0, route.distanceMeters - (reference?.distanceMeters ?? route.distanceMeters));
-  const extraTime = Math.max(0, route.liveDurationSeconds - (reference?.liveDurationSeconds ?? route.liveDurationSeconds));
-  const unknown = unknownPercent(route);
-  const reasons = [...new Set([...route.reasonCodes, ...route.confidence.reasons])]
-    .map((code) => ({ code, label: reasonLabel(code, locale) }))
-    .filter((reason) => reason.label)
-    .slice(0, 3);
 
   return (
     <article className={`route-card ${selected ? "is-selected" : ""}`} data-testid={`route-card-${route.candidateId}`}>
@@ -126,14 +116,7 @@ function RouteCard({
             />
           ))}
         </div>
-        <strong>{t("estimatedFree", { value: estimatedFreePercent(route) })}</strong>
-        {unknown > 0 && <p className="unknown-note"><InfoIcon /> {t("unknownCoverage", { value: unknown })}</p>}
       </div>
-
-      {(extraDistance > 0 || extraTime > 0) && (
-        <p className="detour-note">{t("detour", { distance: formatDistance(extraDistance, locale), time: formatDuration(extraTime, locale) })}</p>
-      )}
-      {!extraDistance && !extraTime && <p className="detour-note">{t("noDetour")}</p>}
 
       {(route.tolls || route.unpaved) && (
         <div className="route-cautions">
@@ -141,11 +124,6 @@ function RouteCard({
           {route.unpaved && <span><AlertIcon />{t("unpaved")}</span>}
         </div>
       )}
-
-      <details className="route-reasons">
-        <summary>{t("why")}</summary>
-        <ul>{reasons.map((reason) => <li key={reason.code}>{reason.label}</li>)}</ul>
-      </details>
 
       <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
         {selected ? <><CheckIcon /> {t("selected")}</> : t("choose")}
@@ -280,7 +258,6 @@ export function RouteResults({
           <RouteCard
             key={route.candidateId}
             route={route}
-            reference={reference}
             selected={route.candidateId === selectedCandidateId}
             recommended={route.candidateId === recommendedId}
             fastest={route.candidateId === reference?.candidateId}

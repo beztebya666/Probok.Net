@@ -321,7 +321,8 @@ export function GreenRouteApp() {
             <RouteResults
               result={state.result}
               routingMode={state.routingMode}
-              selectedCandidateId={state.selectedCandidateId}
+              // The highlighted card is the route on the map, always.
+              selectedCandidateId={selectedRoute?.candidateId}
               onSelect={selectCandidate}
               bookmarked={isBookmarked(bookmarks, searchId)}
               onSaveBookmark={toggleBookmark}

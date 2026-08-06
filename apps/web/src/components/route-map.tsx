@@ -817,16 +817,20 @@ export function RouteMap({
             {labels.trafficTwoGis}
             {!twoGisBrowserKey && <span className="traffic-renderer-reason" aria-hidden="true">{labels.trafficTwoGisUnavailable}</span>}
           </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={showOsm}
-            aria-label={`${labels.trafficOsm}. ${labels.trafficOsmHint}`}
-            title={labels.trafficOsmHint}
-            onClick={() => selectTrafficProvider("osm")}
-          >
-            {labels.trafficOsm}
-          </button>
+          {/* Only offered where there is no provider map: with a key the 2GIS
+              map is strictly better and a second base map is just clutter. */}
+          {!providerMapConfigured && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={showOsm}
+              aria-label={`${labels.trafficOsm}. ${labels.trafficOsmHint}`}
+              title={labels.trafficOsmHint}
+              onClick={() => selectTrafficProvider("osm")}
+            >
+              {labels.trafficOsm}
+            </button>
+          )}
         </div>
       </div>
       {trafficError && <div className="traffic-renderer-alert" role="status">{labels.trafficYandexError}</div>}

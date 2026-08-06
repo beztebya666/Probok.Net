@@ -322,7 +322,9 @@ export function useRouteSearch() {
       reconnectAttempt: 0,
       restored: true,
       ...(routingMode ? { routingMode } : {}),
-      selectedCandidateId: selectedCandidateId ?? defaultCandidateId(result, routingMode),
+      // A restored analysis arrives with its route chosen; otherwise the panel
+      // shows a route while claiming nothing is selected.
+      selectedCandidateId: selectedCandidateId ?? displayedSelectedRoute(result, undefined, routingMode)?.candidateId,
     });
   }, []);
 
