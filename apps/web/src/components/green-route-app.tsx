@@ -288,8 +288,7 @@ export function GreenRouteApp() {
           <RouteForm
             // The preload arrives after the first render, and initial state is
             // only read once; remounting is what makes it visible.
-            key={plannerRoute?.key ?? "blank"}
-            {...(plannerRoute ? { initialRoute: { origin: plannerRoute.origin, destination: plannerRoute.destination } } : {})}
+            {...(plannerRoute ? { initialRoute: plannerRoute } : {})}
             onSubmit={(request) => { setLastRequest(request); setRefreshing(undefined); announceDemo(); return start(request); }}
             onRouteLabelChange={setRouteLabel}
             bookmarks={bookmarks}

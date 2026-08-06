@@ -72,13 +72,15 @@ function RouteCard({
           {recommended && <span className="badge badge-recommended">{t("recommended")}</span>}
           {fastest && <span className="badge">{t("fastest")}</span>}
           {greenest && !recommended && <span className="badge badge-green">{t("greenest")}</span>}
+          {/* A toll is a decision, not a footnote — and one glyph carries it. */}
+          {route.tolls && <span className="badge badge-toll" title={t("tolls")} aria-label={t("tolls")}>₽</span>}
         </div>
       </div>
 
       <div className="route-primary-metrics">
         <div><ClockIcon /><span><strong>{formatDuration(route.liveDurationSeconds, locale)}</strong><small>{t("eta")}</small></span></div>
-        <div><span className="metric-symbol">↔</span><span><strong>{formatDistance(route.distanceMeters, locale)}</strong><small>{t("distance")}</small></span></div>
-        <div><span className="metric-symbol">+ </span><span><strong>{formatDuration(route.trafficDelaySeconds, locale)}</strong><small>{t("delay")}</small></span></div>
+        <div><span className="metric-symbol" aria-hidden="true">↔</span><span><strong>{formatDistance(route.distanceMeters, locale)}</strong><small>{t("distance")}</small></span></div>
+        <div><span className="metric-symbol" aria-hidden="true">+</span><span><strong>{formatDuration(route.trafficDelaySeconds, locale)}</strong><small>{t("delay")}</small></span></div>
         {/* The ranking criterion belongs with the other numbers, not in a banner
             above them. */}
         <div><span className="metric-dot flow-green" aria-hidden="true" /><span><strong>{greenTimePercent(route)}%</strong><small>{t("greenShort")}</small></span></div>
@@ -101,11 +103,8 @@ function RouteCard({
         </div>
       </div>
 
-      {(route.tolls || route.unpaved) && (
-        <div className="route-cautions">
-          {route.tolls && <span><AlertIcon />{t("tolls")}</span>}
-          {route.unpaved && <span><AlertIcon />{t("unpaved")}</span>}
-        </div>
+      {route.unpaved && (
+        <div className="route-cautions"><span><AlertIcon />{t("unpaved")}</span></div>
       )}
 
       <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
@@ -165,7 +164,12 @@ export function RouteResults({
   const ordered = [...listed].sort((a, b) => {
     if (a.candidateId === reference?.candidateId) return 1;
     if (b.candidateId === reference?.candidateId) return -1;
-    return greenTimePercent(b) - greenTimePercent(a) || a.liveDurationSeconds - b.liveDurationSeconds;
+    const share = greenTimePercent(b) - greenTimePercent(a);
+    // Within a point of each other the two are the same answer, so the one that
+    // costs nothing goes first.
+    if (Math.abs(share) > 1) return share;
+    if (a.tolls !== b.tolls) return a.tolls ? 1 : -1;
+    return a.liveDurationSeconds - b.liveDurationSeconds;
   });
   // Most warnings are engineering telemetry: billing estimates, provider
   // bookkeeping, codes with no translation. The panel keeps the few that change

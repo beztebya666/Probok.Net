@@ -50,7 +50,7 @@ type Props = {
   onRemoveBookmark?: ((id: string) => void) | undefined;
   // The demo build opens with a finished analysis; the planner should show the
   // trip it belongs to instead of two blank fields.
-  initialRoute?: { origin: LocationValue; destination: LocationValue } | undefined;
+  initialRoute?: { key: string; origin: LocationValue; destination: LocationValue } | undefined;
 };
 
 function safeLocalStorage(): Storage | undefined {
@@ -73,8 +73,19 @@ function uuid(): string {
 
 export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTrafficProviderChange, status, onRouteLabelChange, bookmarks, activeSearchId, onOpenBookmark, onRemoveBookmark, initialRoute }: Props) {
   const { t } = useLocale();
-  const [origin, setOrigin] = useState<LocationValue>(initialRoute?.origin ?? { label: "" });
-  const [destination, setDestination] = useState<LocationValue>(initialRoute?.destination ?? { label: "" });
+  // Derived rather than remounted: the form used to be rebuilt whenever a saved
+  // analysis was opened, which threw away the tab the user was standing on.
+  const [fields, setFields] = useState<{ key: string; origin: LocationValue; destination: LocationValue }>(() => ({
+    key: initialRoute?.key ?? "",
+    origin: initialRoute?.origin ?? { label: "" },
+    destination: initialRoute?.destination ?? { label: "" },
+  }));
+  const current = initialRoute && initialRoute.key !== fields.key
+    ? { key: initialRoute.key, origin: initialRoute.origin, destination: initialRoute.destination }
+    : fields;
+  const { origin, destination } = current;
+  const setOrigin = (value: LocationValue) => setFields({ ...current, origin: value });
+  const setDestination = (value: LocationValue) => setFields({ ...current, destination: value });
   const [waypoints, setWaypoints] = useState<LocationValue[]>([]);
   const [mode, setMode] = useState<RoutingMode>(defaultRoutePreferences.routingMode);
   const [extraDistanceKm, setExtraDistanceKm] = useState(defaultRoutePreferences.extraDistanceKm);
@@ -169,8 +180,7 @@ export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTraff
   };
 
   const restorePreset = (preset: RoutePreset) => {
-    setOrigin(preset.origin);
-    setDestination(preset.destination);
+    setFields({ ...current, origin: preset.origin, destination: preset.destination });
     setWaypoints(preset.waypoints);
     setMode(preset.routingMode);
     setExtraDistanceKm(preset.extraDistanceKm);
@@ -303,7 +313,7 @@ export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTraff
               // done, and a lingering focus ring reads as "this is now active".
               // Keyboard focus is untouched, so Tab still shows the ring.
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => { setOrigin(destination); setDestination(origin); }}
+              onClick={() => setFields({ ...current, origin: destination, destination: origin })}
             >
               <SwapIcon />
             </button>

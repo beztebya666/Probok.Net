@@ -1237,7 +1237,10 @@ input, textarea, [contenteditable="true"] { user-select: text; -webkit-user-sele
    starts a few pixels further right than the one above it. */
 .metric-dot { box-sizing: border-box; width: 16px; height: 16px; flex: none; padding: 3.5px; background-clip: content-box; border-radius: 50%; }
 .route-primary-metrics > div { display: flex; min-width: 0; align-items: center; gap: 6px; }
-.route-primary-metrics svg, .metric-symbol { width: 16px; flex: none; color: var(--ink-3); font-size: 14px; }
+/* Every metric icon occupies the same 16px square and is centred in it, so the
+   column of icons reads as a column. */
+.route-primary-metrics svg, .metric-symbol { width: 16px; height: 16px; flex: none; color: var(--ink-3); }
+.metric-symbol { display: grid; place-items: center; font-size: 14px; line-height: 1; }
 .route-primary-metrics span:not(.metric-symbol) { display: grid; min-width: 0; }
 .route-primary-metrics strong { overflow: hidden; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
 .route-primary-metrics small { color: var(--ink-3); font-size: 7px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
@@ -1408,6 +1411,7 @@ input, textarea, [contenteditable="true"] { user-select: text; -webkit-user-sele
   .route-green-share:hover:not(:disabled) { border-color: var(--line-strong); }
 }
 .badge-rank { color: var(--ink-2); background: var(--surface-3); }
+.badge-toll { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; color: var(--flow-orange); font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--flow-orange) 16%, transparent); border-radius: 50%; }
 
 /* ============================ Keyless map ================================ */
 
