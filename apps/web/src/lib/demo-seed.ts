@@ -1,5 +1,6 @@
 import type { DemoPreload } from "./demo-preload";
 import { readRouteBookmarks, writeRouteBookmarks, type RouteBookmark } from "./route-bookmarks";
+import { MAX_EXTRA_DISTANCE_KM, MAX_EXTRA_TIME_MINUTES, defaultRoutePreferences, readRoutePreferences, writeRoutePreferences } from "./route-preferences";
 import { readRoutePresets, readTrafficProvider, writeRoutePresets, writeTrafficProvider, type RoutePreset } from "./route-presets";
 
 /**
@@ -17,7 +18,25 @@ export function seedDemoLists(preload: DemoPreload, storage: Storage | undefined
   if (!storage) return;
   seedPresets(preload, storage, now);
   seedBookmarks(preload, storage, now);
+  seedPreferences(preload, storage);
   seedBaseMap(storage);
+}
+
+/**
+ * The planner must say what the shown analysis was actually asked for.
+ * Without this the demo opened with "Свободнее" selected above routes marked
+ * "не весь зелёный" — a picture of the interface contradicting itself.
+ */
+function seedPreferences(preload: DemoPreload, storage: Storage): void {
+  const stored = readRoutePreferences(storage);
+  if (stored.routingMode !== defaultRoutePreferences.routingMode) return;
+  writeRoutePreferences({
+    routingMode: preload.request.routingMode,
+    extraDistanceKm: Math.min(MAX_EXTRA_DISTANCE_KM, Math.round(preload.request.maxExtraDistanceMeters / 1000)),
+    extraTimeMinutes: Math.min(MAX_EXTRA_TIME_MINUTES, Math.round(preload.request.maxExtraTimeSeconds / 60)),
+    avoidTolls: preload.request.avoidTolls,
+    avoidUnpaved: preload.request.avoidUnpaved,
+  }, storage);
 }
 
 /**
