@@ -31,9 +31,26 @@ const page = await context.newPage();
 // The cached result does not always carry the request that produced it, and the
 // demo needs one to offer a refresh, so it is taken from the wire.
 let submitted;
+// The finished analysis is taken off the wire rather than out of the page's
+// cache: a wide allowance produces geometry past the storage budget, and the
+// page then keeps nothing at all.
+let completed;
 page.on("request", (request) => {
   if (request.method() === "POST" && request.url().includes("/api/v1/route-searches")) {
     try { submitted = JSON.parse(request.postData() ?? "null"); } catch { submitted = undefined; }
+  }
+});
+page.on("response", async (response) => {
+  if (!response.url().includes("/api/v1/route-searches")) return;
+  let body;
+  try { body = await response.text(); } catch { return; }
+  // Two shapes carry the same answer: the plain GET, and the completion event
+  // on the stream the page listens to.
+  for (const candidate of [body, ...body.split(/^data: /m).slice(1)]) {
+    let parsed;
+    try { parsed = JSON.parse(candidate); } catch { continue; }
+    const result = parsed?.result ?? parsed;
+    if (result?.status === "COMPLETED" && Array.isArray(result.greenTopRoutes)) completed = result;
   }
 });
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
@@ -58,18 +75,22 @@ await page.getByText(mode, { exact: true }).click();
 // The widest allowance the UI offers: the point is to see the detour it finds.
 await page.locator(".advanced-settings > summary").click();
 const sliders = page.getByRole("slider");
-await sliders.nth(0).fill("150");
-await sliders.nth(1).fill("300");
+await sliders.nth(0).fill(process.env.FREEZE_EXTRA_KM ?? "150");
+await sliders.nth(1).fill(process.env.FREEZE_EXTRA_MIN ?? "300");
 await page.locator(".advanced-settings > summary").click();
 
 await page.getByRole("button", { name: "Найти маршрут" }).click();
 await page.getByRole("heading", { name: "Варианты маршрута" }).waitFor({ timeout: 120_000 });
 await page.waitForTimeout(6000);
 
+// The page caches the finished analysis, but only while it fits the storage
+// budget, and a wide allowance produces geometry that does not. The API holds
+// the same answer whole, so it is the fallback rather than the exception.
 const stored = await page.evaluate(() => window.localStorage.getItem("greenroute.last-result.v1"));
-if (!stored) throw new Error("the search produced no cached result");
-const cached = JSON.parse(stored);
-if (!cached.result?.greenTopRoutes?.length) throw new Error("the search returned no ranked routes");
+const cached = stored ? JSON.parse(stored) : {};
+cached.result ??= completed;
+if (!cached.result) throw new Error("the search produced no result to freeze");
+if (!cached.result.greenTopRoutes?.length) throw new Error("the search returned no ranked routes");
 
 // The wire body has no requestId — the edge API assigns one — while the client
 // schema requires it, so the result's own id fills the gap.
@@ -90,6 +111,7 @@ const payloadText = JSON.stringify(payload);
 writeFileSync(join(repoRoot, "apps", "web", "public", "demo", "analysis.json"), payloadText, "utf8");
 writeFileSync(join(repoRoot, "tools", "docs-media", "demo-analysis.json"), payloadText, "utf8");
 
+console.log(JSON.stringify({ providerUsage: cached.result.providerUsage, warnings: (cached.result.warnings ?? []).map((w) => w.code) }));
 const summary = cached.result.greenTopRoutes.map((route) => {
   const total = route.liveDurationSeconds;
   const green = route.metrics?.greenDurationSeconds ?? 0;
