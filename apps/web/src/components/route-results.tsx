@@ -51,6 +51,7 @@ function RouteCard({
   fastest,
   greenest,
   rank,
+  unqualified,
   onSelect,
 }: {
   route: RouteCandidate;
@@ -60,6 +61,7 @@ function RouteCard({
   greenest: boolean;
   // Position in the green ranking, which is what the list is sorted by.
   rank?: number | undefined;
+  unqualified?: boolean | undefined;
   onSelect: () => void;
 }) {
   const { locale, t } = useLocale();
@@ -74,6 +76,7 @@ function RouteCard({
           {greenest && !recommended && <span className="badge badge-green">{t("greenest")}</span>}
           {/* A toll is a decision, not a footnote — and one glyph carries it. */}
           {route.tolls && <span className="badge badge-toll" title={t("tolls")} aria-label={t("tolls")}>₽</span>}
+          {unqualified && <span className="badge badge-unqualified" title={t("notStrictGreenHint")}>{t("notStrictGreen")}</span>}
         </div>
       </div>
 
@@ -107,9 +110,11 @@ function RouteCard({
         <div className="route-cautions"><span><AlertIcon />{t("unpaved")}</span></div>
       )}
 
-      <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
-        {selected ? <><CheckIcon /> {t("selected")}</> : t("choose")}
-      </button>
+      {!unqualified && (
+        <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
+          {selected ? <><CheckIcon /> {t("selected")}</> : t("choose")}
+        </button>
+      )}
       <ExternalRouteLinks route={route} />
     </article>
   );
@@ -244,6 +249,9 @@ export function RouteResults({
             fastest={route.candidateId === reference?.candidateId}
             greenest={route.candidateId === greenest?.candidateId}
             rank={index + 1}
+            // In strict mode a route that is not verified green throughout is
+            // evidence of the search, not an answer it may offer.
+            unqualified={routingMode === "STRICT_GREEN" && !isVerifiedAllGreenRoute(route)}
             onSelect={() => onSelect(route.candidateId)}
           />
         ))}

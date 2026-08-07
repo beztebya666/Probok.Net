@@ -313,6 +313,8 @@ export interface components {
             alternatives: components["schemas"]["RouteCandidate"][];
             /** @description Top discovered candidates that failed the STRICT_GREEN evidence predicate. They are proof of search, never selectable strict-green alternatives, and carry BEST_EFFORT_NOT_STRICT_GREEN plus precise STRICT_GREEN_* rejection reason codes. */
             bestEffortRoutes: components["schemas"]["RouteCandidate"][];
+            /** @description Proof-of-search ranking by measured green share, present in every routing mode. Ordered by the share of driving time on GREEN segments and then by green distance, independent of whether a candidate also satisfies the mode's hard constraints. Entries carry GREEN_RANK_1..3. */
+            greenTopRoutes?: components["schemas"]["RouteCandidate"][];
             fastestReferenceRoute?: components["schemas"]["RouteCandidate"];
             constraints: components["schemas"]["AppliedConstraints"];
             providerUsage: components["schemas"]["ProviderUsage"];

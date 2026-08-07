@@ -1414,6 +1414,7 @@ input, textarea, [contenteditable="true"] { user-select: text; -webkit-user-sele
   .route-green-share:hover:not(:disabled) { border-color: var(--line-strong); }
 }
 .badge-rank { color: var(--ink-2); background: var(--surface-3); }
+.badge-unqualified { color: var(--ink-3); background: transparent; border: 1px solid var(--line); }
 .badge-toll { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; color: var(--flow-orange); font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--flow-orange) 16%, transparent); border-radius: 50%; }
 
 /* ============================ Keyless map ================================ */

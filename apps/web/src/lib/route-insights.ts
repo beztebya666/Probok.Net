@@ -204,11 +204,15 @@ export function formatDuration(seconds: number, locale: "ru" | "en"): string {
  */
 export function displayedRoutes(result: RouteSearchResult, routingMode?: RoutingMode): RouteCandidate[] {
   const qualified = routeCandidatesForMode(result, routingMode);
-  if (qualified.length > 0) return qualified;
+  if (routingMode !== "STRICT_GREEN") return qualified.length > 0 ? qualified : greenRankedRoutes(result, 3);
+
+  // Strict mode still shows the three best by green share — that ranking is what
+  // the product promises — but never the fastest reference, and the ones that
+  // failed the every-segment test are marked and cannot be chosen (ADR-014).
   const reference = result.fastestReferenceRoute?.candidateId;
-  return greenRankedRoutes(result, 3).filter(
-    (route) => routingMode !== "STRICT_GREEN" || route.candidateId !== reference,
-  );
+  const ranked = greenRankedRoutes(result, 3).filter((route) => route.candidateId !== reference);
+  const seen = new Set(ranked.map((route) => route.candidateId));
+  return [...ranked, ...qualified.filter((route) => !seen.has(route.candidateId))];
 }
 
 /** The route the map draws: the chosen one, or the best of what is shown. */
