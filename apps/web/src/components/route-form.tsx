@@ -50,7 +50,7 @@ type Props = {
   onRemoveBookmark?: ((id: string) => void) | undefined;
   // The demo build opens with a finished analysis; the planner should show the
   // trip it belongs to instead of two blank fields.
-  initialRoute?: { key: string; origin: LocationValue; destination: LocationValue } | undefined;
+  initialRoute?: { key: string; origin: LocationValue; destination: LocationValue; routingMode?: RoutingMode } | undefined;
   // Saved routes written after this component mounted, e.g. by the demo seed.
   seededPresets?: RoutePreset[] | undefined;
 };
@@ -156,6 +156,17 @@ export function RouteForm({ onSubmit, busy, configured, trafficProvider, onTraff
       window.removeEventListener("storage", syncStorage);
     };
   }, []);
+
+  // A restored analysis carries the mode it was asked for, and the planner has
+  // to agree with the results shown beside it. Storage alone cannot carry this:
+  // the storage event does not fire in the document that wrote it, and this
+  // form would overwrite the value with its own state on the next render.
+  const appliedModeKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!initialRoute?.routingMode || appliedModeKey.current === initialRoute.key) return;
+    appliedModeKey.current = initialRoute.key;
+    setMode(initialRoute.routingMode);
+  }, [initialRoute]);
 
   // Persist only after the stored preferences were applied, so the very first
   // render never overwrites them with component defaults.

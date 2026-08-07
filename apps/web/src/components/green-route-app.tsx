@@ -60,7 +60,7 @@ export function GreenRouteApp() {
   const [seededPresets, setSeededPresets] = useState<RoutePreset[] | undefined>(undefined);
   // What the planner should show: set when an analysis is opened from a saved
   // list, so the form matches the result on screen instead of sitting empty.
-  const [plannerRoute, setPlannerRoute] = useState<{ key: string; origin: LocationValue; destination: LocationValue } | undefined>(undefined);
+  const [plannerRoute, setPlannerRoute] = useState<{ key: string; origin: LocationValue; destination: LocationValue; routingMode?: RoutingMode } | undefined>(undefined);
   const [lastRequest, setLastRequest] = useState<RouteSearchRequest | undefined>(undefined);
   // While a bookmark is being refreshed we hold its previous content, so a
   // provider outage or an exhausted quota restores it instead of losing it.
@@ -117,6 +117,7 @@ export function GreenRouteApp() {
           key: "demo",
           origin: { label: preload.origin, point: preload.request.origin },
           destination: { label: preload.destination, point: preload.request.destination },
+          routingMode: preload.request.routingMode,
         });
       }
       restoreResult(preload.result, preload.request.routingMode, preload.result.greenTopRoutes[0]?.candidateId);
@@ -213,6 +214,7 @@ export function GreenRouteApp() {
       key: `bookmark-${bookmark.id}`,
       origin: { label: origin, point: request.origin },
       destination: { label: destination, point: request.destination },
+      routingMode: request.routingMode,
     });
   };
 
