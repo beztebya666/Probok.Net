@@ -93,6 +93,11 @@ if (!cached.result) throw new Error("the search produced no result to freeze");
 // Printed before the check below: a search that comes back empty is exactly
 // when its warnings and provider usage are worth reading.
 console.log(JSON.stringify({
+  // The two points the search actually asked about: a suggestion list can hand
+  // back a namesake in another city, and the provider then refuses a distance
+  // nobody meant to request.
+  origin: submitted?.origin,
+  destination: submitted?.destination,
   status: cached.result.status,
   ranked: (cached.result.greenTopRoutes ?? []).length,
   alternatives: (cached.result.alternatives ?? []).length,

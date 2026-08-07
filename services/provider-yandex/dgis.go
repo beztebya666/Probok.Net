@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -293,6 +294,15 @@ func (a *dgisAdapter) doRoute(ctx context.Context, request contracts.ProviderRou
 		return contracts.ProviderRouteResponse{}, serviceError("PROVIDER_RESPONSE_INVALID", "provider response exceeded the safe size limit", http.StatusBadGateway, false, err)
 	}
 	if httpResponse.StatusCode != http.StatusOK {
+		// Without this the reason a provider refused a route is invisible: the
+		// metric says "forbidden" and the operator is left guessing. The
+		// provider's own words — "excessive distance between points for
+		// demo-keys", "too many requests" — are what makes it actionable. The
+		// body is bounded and carries no request data.
+		slog.Warn("2GIS route request rejected",
+			"status", httpResponse.StatusCode,
+			"retry_after", httpResponse.Header.Get("Retry-After"),
+			"body", strings.TrimSpace(string(responseBody[:min(len(responseBody), 300)])))
 		return contracts.ProviderRouteResponse{}, mapDGISStatus(httpResponse.StatusCode, httpResponse.Header.Get("Retry-After"), a.now())
 	}
 
