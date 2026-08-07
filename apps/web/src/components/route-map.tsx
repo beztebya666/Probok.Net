@@ -765,6 +765,7 @@ export function RouteMap({
           selectedRoute={visibleSelectedRoute}
           segmentColor={segmentColor}
           label={t("mapFallbackTitle")}
+          zoomLabels={{ in: labels.zoomIn, out: labels.zoomOut }}
         />
       ) : (
         <SchematicMap routes={visibleRoutes} selectedRoute={visibleSelectedRoute} label={t("mapFallbackTitle")} hidden />

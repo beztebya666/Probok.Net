@@ -66,12 +66,15 @@ export function TileMap({
   segmentColor,
   label,
   hidden,
+  zoomLabels,
 }: {
   routes: RouteCandidate[];
   selectedRoute?: RouteCandidate | undefined;
   segmentColor: (segment: RouteCandidate["segments"][number]) => string;
   label: string;
   hidden?: boolean | undefined;
+  /** Spoken names for the zoom buttons; "+" tells a screen reader nothing. */
+  zoomLabels: { in: string; out: string };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -235,8 +238,8 @@ export function TileMap({
         </svg>
       )}
       <div className="tile-map-zoom">
-        <button type="button" onClick={() => zoomBy(1)} aria-label="+">+</button>
-        <button type="button" onClick={() => zoomBy(-1)} aria-label="−">&minus;</button>
+        <button type="button" onClick={() => zoomBy(1)} aria-label={zoomLabels.in} title={zoomLabels.in}>+</button>
+        <button type="button" onClick={() => zoomBy(-1)} aria-label={zoomLabels.out} title={zoomLabels.out}>&minus;</button>
       </div>
       <a className="tile-map-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer noopener">
         © OpenStreetMap
