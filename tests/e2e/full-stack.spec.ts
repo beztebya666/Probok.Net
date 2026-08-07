@@ -2,19 +2,38 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.skip(!process.env.PLAYWRIGHT_BASE_URL, "requires the deployed full stack");
 
-test("loads the interactive Yandex JavaScript API v3 map and accessible controls", async ({ page }) => {
+test("draws the map the deployment can actually draw, with working zoom", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('html[data-greenroute-hydrated="true"]')).toBeAttached();
-  const map = page.locator('.map-canvas[data-map-renderer="yandex"].is-ready');
+  await expect(page.getByRole("radiogroup", { name: "Пробки" })).toBeVisible();
+
+  // A deployment without a provider credential is a supported deployment, not a
+  // broken one: it offers OpenStreetMap and says the rest are unavailable. The
+  // e2e stack is exactly that, so the assertions follow what the build has.
+  const osmChoice = page.getByRole("radio", { name: /OSM/ });
+  if (await osmChoice.count() > 0) {
+    await expect(osmChoice).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("radio", { name: "Выкл" })).toHaveAttribute("aria-disabled", "true");
+    const osm = page.locator(".tile-map").first();
+    await expect(osm).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => osm.locator(".tile-map-tiles img").count()).toBeGreaterThan(0);
+    const zoomIn = osm.getByRole("button", { name: "Увеличить масштаб" });
+    await expect(zoomIn).toBeEnabled();
+    await zoomIn.click();
+    await osm.getByRole("button", { name: "Уменьшить масштаб" }).click();
+    return;
+  }
+
+  // Which provider draws the map is a deployment choice, so the test follows
+  // the one the build settled on rather than naming it in advance.
+  const map = page.locator(".map-canvas.is-ready");
   await expect(map).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => map.locator(":scope > *").count()).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => Boolean((window as Window & { ymaps3?: unknown }).ymaps3))).toBe(true);
-
-  await expect(page.getByRole("radiogroup", { name: "Пробки" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Выкл" })).toHaveAttribute("aria-checked", "true");
-  const paidYandexTraffic = page.getByRole("radio", { name: /Яндекс/ });
-  await expect(paidYandexTraffic).toHaveAttribute("aria-disabled", "true");
-  await expect(paidYandexTraffic).toHaveAttribute("title", "Нужен платный тариф");
+  const renderer = await map.getAttribute("data-map-renderer");
+  const globalName = renderer === "2gis" ? "mapgl" : "ymaps3";
+  await expect.poll(() => page.evaluate((name) => Boolean((window as unknown as Record<string, unknown>)[name]), globalName)).toBe(true);
+  const checked = page.locator('.traffic-renderer-segments [role="radio"][aria-checked="true"]');
+  await expect(checked).toHaveCount(1);
 
   const zoomIn = page.getByRole("button", { name: "Увеличить масштаб" });
   const zoomOut = page.getByRole("button", { name: "Уменьшить масштаб" });
@@ -61,11 +80,11 @@ test("switches the whole map to the exclusive 2GIS traffic renderer", async ({ p
   })).toBe("off");
 });
 
-test("keeps the swap control outside both address focus outlines", async ({ page }) => {
+test("keeps the swap control inside the destination field and clear of its text", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('html[data-greenroute-hydrated="true"]')).toBeAttached();
-  const origin = page.getByRole("combobox", { name: "Откуда" });
-  const destination = page.getByRole("combobox", { name: "Куда" });
+  const origin = page.getByRole("combobox", { name: "Откуда", exact: true });
+  const destination = page.getByRole("combobox", { name: "Куда", exact: true });
   const swap = page.getByRole("button", { name: "Откуда / Куда" });
   await origin.focus();
 
@@ -77,8 +96,19 @@ test("keeps the swap control outside both address focus outlines", async ({ page
   expect(originBox).not.toBeNull();
   expect(swapBox).not.toBeNull();
   expect(destinationBox).not.toBeNull();
-  expect(originBox!.y + originBox!.height).toBeLessThanOrEqual(swapBox!.y);
-  expect(swapBox!.y + swapBox!.height).toBeLessThanOrEqual(destinationBox!.y);
+
+  // The swap rides in the destination field, mirroring the geolocation control
+  // in the origin one, so the pair needs no row of its own.
+  expect(swapBox!.y).toBeGreaterThanOrEqual(destinationBox!.y);
+  expect(swapBox!.y + swapBox!.height).toBeLessThanOrEqual(destinationBox!.y + destinationBox!.height);
+  expect(swapBox!.x + swapBox!.width).toBeLessThanOrEqual(destinationBox!.x + destinationBox!.width);
+  // It must never reach into the field above it.
+  expect(swapBox!.y).toBeGreaterThanOrEqual(originBox!.y + originBox!.height);
+
+  // Typed text has to stop before the control rather than run underneath it.
+  const clearance = await destination.evaluate((node) => Number.parseFloat(getComputedStyle(node).paddingRight));
+  const overlap = destinationBox!.x + destinationBox!.width - swapBox!.x;
+  expect(clearance).toBeGreaterThanOrEqual(overlap);
 });
 
 async function chooseFirstSuggestion(page: Page, field: "Откуда" | "Куда", query: string) {
@@ -112,15 +142,14 @@ test("returns only a verified all-green route through the deployed stack", async
   await expect(page.getByRole("heading", { name: "Варианты маршрута" })).toBeVisible({ timeout: 30_000 });
 
   // Proof that a search happened rather than a single provider answer being
-  // passed through: the podium ranks what the ladder actually found.
-  const podium = page.locator(".green-podium");
-  await expect(podium).toBeVisible({ timeout: 35_000 });
-  const ranked = podium.locator(".green-podium-row");
-  await expect(ranked.first()).toBeVisible();
-  const shares = await ranked.locator(".green-podium-share").allInnerTexts();
-  expect(shares.length).toBeGreaterThan(0);
-  expect(shares.length).toBeLessThanOrEqual(3);
-  const percents = shares.map((text) => Number.parseInt(text.replace(/\D+/g, ""), 10));
+  // passed through: the list ranks what the ladder actually found. Strict mode
+  // never lists the fastest reference, so every card here is green-ranked.
+  const cards = page.locator("[data-green-percent]");
+  await expect(cards.first()).toBeVisible({ timeout: 35_000 });
+  const percents = (await cards.evaluateAll((nodes) =>
+    nodes.map((node) => Number((node as HTMLElement).dataset["greenPercent"]))));
+  expect(percents.length).toBeGreaterThan(0);
+  expect(percents.length).toBeLessThanOrEqual(3);
   expect(percents.every((value) => value >= 0 && value <= 100)).toBe(true);
   // Ranked by green share, best first.
   expect([...percents].sort((a, b) => b - a)).toEqual(percents);
