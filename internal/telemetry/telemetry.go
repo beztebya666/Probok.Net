@@ -21,7 +21,9 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	// Must match the schema the SDK's own default resource carries, or merging
+	// the two fails with a schema conflict and the pipeline never starts.
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 )
 
 type Metrics struct {
