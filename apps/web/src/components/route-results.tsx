@@ -110,11 +110,11 @@ function RouteCard({
         <div className="route-cautions"><span><AlertIcon />{t("unpaved")}</span></div>
       )}
 
-      {!unqualified && (
-        <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
-          {selected ? <><CheckIcon /> {t("selected")}</> : t("choose")}
-        </button>
-      )}
+      {/* Marked, not withheld: the badge says the route is not green throughout,
+          and choosing it stays the reader's call. */}
+      <button className={`button ${selected ? "button-selected" : "button-secondary"}`} type="button" onClick={onSelect} disabled={selected}>
+        {selected ? <><CheckIcon /> {t("selected")}</> : t("choose")}
+      </button>
       <ExternalRouteLinks route={route} />
     </article>
   );
