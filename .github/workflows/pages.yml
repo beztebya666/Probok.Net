@@ -27,6 +27,10 @@ jobs:
   # for no benefit here, and leaves a half-finished deployment behind when the
   # deploy step times out.
   deploy:
+    # GitHub Pages needs a paid plan to serve a private repository, so on a
+    # private one there is nothing to deploy to. Skipping says that plainly
+    # instead of failing every push with a 404 from the deploy step.
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
