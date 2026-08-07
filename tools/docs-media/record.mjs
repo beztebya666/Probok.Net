@@ -12,16 +12,19 @@ import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-const BASE = process.argv[2] ?? "http://127.0.0.1:3200";
+const BASE = process.argv[2] ?? "http://localhost:3000";
 const ROOT = resolve(process.argv[3] ?? "docs/media/frames");
+// Recording against the live stack shows the real map with its traffic layer;
+// the frozen analysis is what a saved search restores there too.
+const LIVE = !process.argv.includes("--demo");
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, "demo-analysis.json"), "utf8"));
 
 const SAVED = JSON.stringify({
   version: 1,
   savedAt: Date.parse(fixture.result.generatedAt),
-  routingMode: "GREENEST",
-  selectedCandidateId: fixture.result.selectedRoute.candidateId,
+  routingMode: fixture.request.routingMode,
+  selectedCandidateId: (fixture.result.selectedRoute ?? fixture.result.greenTopRoutes?.[0])?.candidateId,
   request: fixture.request,
   result: fixture.result,
 });
@@ -41,12 +44,12 @@ async function record(name, { width, height, theme, restore = false, fps = 3 }, 
     reducedMotion: "no-preference",
   });
   await context.addInitScript(
-    ([theme, saved, restore]) => {
+    ([theme, saved, restore, live]) => {
       window.localStorage.setItem("greenroute.theme.v1", theme);
       window.localStorage.setItem("greenroute.traffic-provider.v1", JSON.stringify({ version: 1, provider: "2gis" }));
-      if (restore) window.localStorage.setItem("greenroute.last-result.v1", saved);
+      if (restore || live) window.localStorage.setItem("greenroute.last-result.v1", saved);
     },
-    [theme, SAVED, restore],
+    [theme, SAVED, restore, LIVE],
   );
   const page = await context.newPage();
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
@@ -73,6 +76,19 @@ async function record(name, { width, height, theme, restore = false, fps = 3 }, 
 // The whole point of the app, end to end: two addresses, a mode, a search, and
 // three routes ranked by how much of them is green.
 await record("search", { width: 1280, height: 800, theme: "light", fps: 3 }, async (page) => {
+  if (LIVE) {
+    // Typing an address is a geocoder call, not a routing one, so the clip can
+    // show the real thing without spending the routing allowance.
+    const from = page.getByRole("combobox", { name: "Откуда", exact: true });
+    await from.click();
+    await from.fill("");
+    await from.pressSequentially("Коломенская", { delay: 120 });
+    await page.getByRole("option").first().waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1200);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(1500);
+    return;
+  }
   const origin = page.getByRole("combobox", { name: "Откуда", exact: true });
   await origin.click();
   await origin.pressSequentially("Кремль", { delay: 130 });
@@ -95,14 +111,14 @@ await record("search", { width: 1280, height: 800, theme: "light", fps: 3 }, asy
   await page.waitForTimeout(3500);
 });
 
-// Clicking a route's green share previews it on the map — the proof that the
+// Choosing another of the ranked routes redraws the map — the proof that the
 // ranking is real routes and not three numbers.
 await record("podium", { width: 1280, height: 800, theme: "light", restore: true, fps: 3 }, async (page) => {
-  const shares = page.locator(".route-green-share:not(:disabled)");
-  const count = Math.min(3, await shares.count());
-  for (const index of [1, 2, 0].filter((i) => i < count)) {
-    await shares.nth(index).click();
-    await page.waitForTimeout(2200);
+  const choose = page.getByRole("button", { name: "Выбрать" });
+  const count = Math.min(2, await choose.count());
+  for (let index = 0; index < count; index++) {
+    await page.getByRole("button", { name: "Выбрать" }).first().click();
+    await page.waitForTimeout(2600);
   }
 });
 
