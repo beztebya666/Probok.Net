@@ -90,6 +90,15 @@ const stored = await page.evaluate(() => window.localStorage.getItem("greenroute
 const cached = stored ? JSON.parse(stored) : {};
 cached.result ??= completed;
 if (!cached.result) throw new Error("the search produced no result to freeze");
+// Printed before the check below: a search that comes back empty is exactly
+// when its warnings and provider usage are worth reading.
+console.log(JSON.stringify({
+  status: cached.result.status,
+  ranked: (cached.result.greenTopRoutes ?? []).length,
+  alternatives: (cached.result.alternatives ?? []).length,
+  providerUsage: cached.result.providerUsage,
+  warnings: (cached.result.warnings ?? []).map((warning) => warning?.code ?? warning),
+}));
 if (!cached.result.greenTopRoutes?.length) throw new Error("the search returned no ranked routes");
 
 // The wire body has no requestId — the edge API assigns one — while the client
@@ -111,7 +120,6 @@ const payloadText = JSON.stringify(payload);
 writeFileSync(join(repoRoot, "apps", "web", "public", "demo", "analysis.json"), payloadText, "utf8");
 writeFileSync(join(repoRoot, "tools", "docs-media", "demo-analysis.json"), payloadText, "utf8");
 
-console.log(JSON.stringify({ providerUsage: cached.result.providerUsage, warnings: (cached.result.warnings ?? []).map((w) => w.code) }));
 const summary = cached.result.greenTopRoutes.map((route) => {
   const total = route.liveDurationSeconds;
   const green = route.metrics?.greenDurationSeconds ?? 0;
