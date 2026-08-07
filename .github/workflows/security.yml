@@ -15,6 +15,20 @@ permissions:
   contents: read
 
 jobs:
+  # Code scanning needs GitHub Code Security on a private repository. Reading
+  # the visibility here rather than from the event payload keeps the answer
+  # right on scheduled runs too, where no repository object is delivered.
+  visibility:
+    name: Repository visibility
+    runs-on: ubuntu-24.04
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "public=$(gh api "repos/${{ github.repository }}" --jq '.private == false')" >> "$GITHUB_OUTPUT"
+
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
@@ -30,6 +44,11 @@ jobs:
 
   sast:
     name: CodeQL (${{ matrix.language }})
+    needs: visibility
+    # Skipped rather than failed while the repository is private: the analysis
+    # runs fine, but uploading its results is a paid feature, and a check that
+    # can never pass teaches people to ignore red.
+    if: needs.visibility.outputs.public == 'true'
     runs-on: ubuntu-24.04
     permissions:
       security-events: write
@@ -78,8 +97,21 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/repo" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
           fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --scanners vuln,misconfig,secret /repo
+      # This binary is upstream's: the findings live in the Go toolchain and
+      # libraries compiled into the release, and v7.15.3 is the newest one
+      # published. Nothing in this repository can patch them, so a HIGH is
+      # recorded in the run summary and read at the next bump, while a CRITICAL
+      # still stops the pipeline — that is worth acting on before the fix lands.
       - name: Pinned authentication gateway image scan
-        run: >-
-          docker run --rm aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
-          image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
-          quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+        env:
+          TRIVY: aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          GATEWAY: quay.io/oauth2-proxy/oauth2-proxy@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+        run: |
+          docker run --rm "$TRIVY" image --severity HIGH,CRITICAL --ignore-unfixed "$GATEWAY" | tee gateway-scan.txt
+          {
+            echo "### Pinned authentication gateway image"
+            echo '```'
+            cat gateway-scan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm "$TRIVY" image --exit-code 1 --severity CRITICAL --ignore-unfixed "$GATEWAY"
