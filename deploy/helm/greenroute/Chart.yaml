@@ -1,6 +1,6 @@
 apiVersion: v2
 name: greenroute
-description: Production Helm chart for the GreenRoute routing platform
+description: Production Helm chart for the Пробок.Нет routing platform
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

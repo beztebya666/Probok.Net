@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
-  title: GreenRoute Edge API
+  title: Пробок.Нет Edge API
   version: 1.1.0
   summary: Traffic-aware route search with explicit uncertainty and hard detour limits.
   description: |
-    Public BFF contract. Route colors and congestion classes are GreenRoute estimates,
+    Public BFF contract. Route colors and congestion classes are Пробок.Нет estimates,
     not official traffic levels of the map provider. UNKNOWN is never equivalent to GREEN.
   contact:
-    name: GreenRoute maintainers
+    name: Пробок.Нет maintainers
   license:
     name: Proprietary — see repository licensing documents
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
