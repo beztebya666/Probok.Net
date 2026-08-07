@@ -206,13 +206,20 @@ export function displayedRoutes(result: RouteSearchResult, routingMode?: Routing
   const qualified = routeCandidatesForMode(result, routingMode);
   if (routingMode !== "STRICT_GREEN") return qualified.length > 0 ? qualified : greenRankedRoutes(result, 3);
 
-  // Strict mode still shows the three best by green share — that ranking is what
-  // the product promises — but never the fastest reference, and the ones that
-  // failed the every-segment test are marked and cannot be chosen (ADR-014).
+  // Strict mode shows three routes because three is what the product promises,
+  // and it never shows the fastest reference. Routes that passed the
+  // every-segment test come first; the rest fill the podium by green share and
+  // arrive marked, so the reader can see what the search weighed (ADR-014).
   const reference = result.fastestReferenceRoute?.candidateId;
-  const ranked = greenRankedRoutes(result, 3).filter((route) => route.candidateId !== reference);
-  const seen = new Set(ranked.map((route) => route.candidateId));
-  return [...ranked, ...qualified.filter((route) => !seen.has(route.candidateId))];
+  const shown = qualified.filter((route) => route.candidateId !== reference);
+  const seen = new Set(shown.map((route) => route.candidateId));
+  for (const route of greenRankedRoutes(result, 6)) {
+    if (shown.length >= 3) break;
+    if (route.candidateId === reference || seen.has(route.candidateId)) continue;
+    shown.push(route);
+    seen.add(route.candidateId);
+  }
+  return shown.slice(0, 3);
 }
 
 /** The route the map draws: the chosen one, or the best of what is shown. */

@@ -67,7 +67,7 @@ function RouteCard({
   const { locale, t } = useLocale();
 
   return (
-    <article className={`route-card ${selected ? "is-selected" : ""}`} data-testid={`route-card-${route.candidateId}`}>
+    <article className={`route-card ${selected ? "is-selected" : ""}`} data-testid={`route-card-${route.candidateId}`} data-green-percent={greenTimePercent(route)}>
       <div className="route-card-top">
         <div className="route-badges">
           {rank !== undefined && !fastest && <span className="badge badge-rank">#{rank}</span>}
