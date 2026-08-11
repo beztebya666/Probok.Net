@@ -65,7 +65,7 @@ jobs:
         run: go test -race -count=1 -coverprofile=coverage.out ./...
       - name: Provider contract tests
         run: go test -race -count=1 ./services/provider-yandex -run 'Contract|Official|Normalize|ErrorMapping'
-      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: backend-coverage
           path: coverage.out
@@ -131,7 +131,7 @@ jobs:
         run: python3 -B -m unittest tools/test_github_oidc_exec_credential.py tools/test_helm_values_schema.py
       - name: Validate Kubernetes schemas
         run: docker run --rm -v "$PWD:/work" -w /work "$KUBECONFORM_IMAGE" -strict -summary -ignore-missing-schemas /work/rendered.yaml
-      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rendered-kubernetes
           path: rendered.yaml
@@ -179,7 +179,7 @@ jobs:
       - name: Capture diagnostics
         if: failure()
         run: docker compose -p greenroute-e2e ps && docker compose -p greenroute-e2e logs --no-color --tail=300
-      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: playwright-report
