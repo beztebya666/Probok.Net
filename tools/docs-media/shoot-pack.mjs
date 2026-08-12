@@ -135,7 +135,10 @@ async function open(theme, size, { scale = 2, mode, locale = "ru" } = {}) {
   await fill(locale === "ru" ? "Откуда" : "From", fixture.labels.origin);
   await fill(locale === "ru" ? "Куда" : "To", fixture.labels.destination);
   await page.locator("body").click({ position: { x: 2, y: 2 } });
-  await page.waitForTimeout(9500);
+  // The provider's custom dark style arrives after the default one, and a
+  // screenshot taken in between catches an unstyled basemap that looks like a
+  // broken map rather than a slow one.
+  await page.waitForTimeout(13_500);
   return { context, page };
 }
 

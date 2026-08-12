@@ -9,6 +9,7 @@ template: the same yellow, the same paper, the same three flow colours.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from pptx.util import Emu, Inches, Pt
 
 PACK = Path(sys.argv[1] if len(sys.argv) > 1 else "tmp/FOR_INVESTORS")
 SHOTS = PACK / "screenshots"
+CAPTURE = PACK / "_data" / "live-greenest.json"
 BRAND = Path("apps/web/public/brand/logo-dark-512.png")
 
 INK = RGBColor(0xF1, 0xF0, 0xEE)
@@ -32,6 +34,33 @@ RED = RGBColor(0xFF, 0x5D, 0x5D)
 FONT = "Segoe UI"
 
 W, H = Inches(13.333), Inches(7.5)
+
+
+def measured(route):
+    """The numbers the interface shows for one route, straight from the capture."""
+    metrics = route.get("metrics", {})
+    total = route["liveDurationSeconds"] or 1
+    return {
+        "green": round(metrics.get("greenDurationSeconds", 0) / total * 100),
+        "minutes": round(total / 60),
+        "km": round(route["distanceMeters"] / 1000, 1),
+        "red": round(metrics.get("redDurationSeconds", 0) / 60),
+    }
+
+
+# The worked example is read from the capture the screenshots were taken on, so
+# the slide cannot drift away from the pictures beside it.
+EXAMPLE = None
+if CAPTURE.exists():
+    _capture = json.loads(CAPTURE.read_text(encoding="utf-8"))
+    _result = _capture["result"]
+    if _result.get("selectedRoute") and _result.get("fastestReferenceRoute"):
+        EXAMPLE = {
+            "labels": _capture["labels"],
+            "chosen": measured(_result["selectedRoute"]),
+            "fastest": measured(_result["fastestReferenceRoute"]),
+            "captured": _result["generatedAt"],
+        }
 
 deck = Presentation()
 deck.slide_width, deck.slide_height = W, H
@@ -175,8 +204,35 @@ text(page, "Карточка варианта: время, расстояние,
 page = slide()
 heading(page, "Приложение целиком", size=30, underline=False)
 picture(page, "01-desktop-dark.png", Inches(0.5), Inches(1.4), W - Inches(1.0), Inches(5.2))
-caption(page, "Боевой стек: карта и слой пробок — 2ГИС, маршруты — настоящий ответ провайдера.",
-        Inches(6.75))
+caption(page, "Боевой стек: карта и слой пробок — 2ГИС, маршруты — настоящий ответ провайдера. "
+              "Зелёная линия — предложенный объезд, серые — то, что предлагают обычно.", Inches(6.75))
+
+# ─────────────────────────────────── 4b. The worked example
+if EXAMPLE:
+    page = slide()
+    heading(page, "Один замер в час пик")
+    text(page, f"{EXAMPLE['labels']['origin']} → {EXAMPLE['labels']['destination']}, "
+               f"{EXAMPLE['captured'][8:10]}.{EXAMPLE['captured'][5:7]}.{EXAMPLE['captured'][:4]}, "
+               "утренний час пик. Настоящий ответ 2ГИС.",
+         Inches(0.9), Inches(1.95), Inches(11.5), Inches(0.6), size=16, colour=MUTED)
+
+    fastest, chosen = EXAMPLE["fastest"], EXAMPLE["chosen"]
+    for left, title, data, colour in (
+        (Inches(0.9), "Самый быстрый", fastest, RED),
+        (Inches(6.9), "Что предлагает Пробок.Нет", chosen, GREEN),
+    ):
+        text(page, title, left, Inches(2.7), Inches(5.4), Inches(0.5), size=18, colour=colour, bold=True)
+        text(page, [f"{data['minutes']} мин в пути · {data['km']} км",
+                    f"{data['green']} % пути по зелёному",
+                    f"{data['red']} мин в красном"],
+             left, Inches(3.3), Inches(5.4), Inches(2.0), size=22, colour=INK, spacing=1.4)
+
+    text(page,
+         f"+{chosen['minutes'] - fastest['minutes']} минут в пути — "
+         f"и {fastest['red']} минут стояния превращаются в {chosen['red']}.",
+         Inches(0.9), Inches(5.7), Inches(11.5), Inches(0.9), size=22, colour=ACCENT, bold=True)
+    text(page, "Это и есть весь продукт в одной строке: доплатить временем, чтобы ехать, а не стоять.",
+         Inches(0.9), Inches(6.4), Inches(11.5), Inches(0.7), size=15, colour=MUTED)
 
 # ─────────────────────────────────────────────────────────── 5. Top-3
 page = slide()

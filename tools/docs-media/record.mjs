@@ -52,12 +52,14 @@ async function record(name, { width, height, theme, restore = false, fps = 3 }, 
     reducedMotion: "no-preference",
   });
   await context.addInitScript(
-    ([theme, saved, restore, live]) => {
+    ([theme, saved, restore, live, fullSearch]) => {
       window.localStorage.setItem("greenroute.theme.v1", theme);
       window.localStorage.setItem("greenroute.traffic-provider.v1", JSON.stringify({ version: 1, provider: "2gis" }));
-      if (restore || live) window.localStorage.setItem("greenroute.last-result.v1", saved);
+      // A clip of a real search has to start on an empty screen: seeding the
+      // previous answer would show the result before the question was asked.
+      if ((restore || live) && !fullSearch) window.localStorage.setItem("greenroute.last-result.v1", saved);
     },
-    [theme, SAVED, restore, LIVE],
+    [theme, SAVED, restore, LIVE, Boolean(process.env.RECORD_FULL_SEARCH)],
   );
   const page = await context.newPage();
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
