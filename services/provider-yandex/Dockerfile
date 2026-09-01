@@ -3,7 +3,7 @@
 # Docker Official Image, exact Go patch and multi-platform index digest.
 # Build on the host architecture and cross-compile: running the Go toolchain
 # under QEMU is slow and needlessly fragile.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm@sha256:6c5605ab3a9a9fb3c4eafe5b3d63cdbf3881caf113262b67862547b54a9db599 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS build
 ARG TARGETOS
 ARG TARGETARCH
 
