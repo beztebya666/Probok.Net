@@ -49,7 +49,11 @@ jobs:
           # A project site is served from /<repo>/, so every asset needs that prefix.
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
         run: node tools/pages/build-static-demo.mjs
+      # enablement turns Pages on for the repository the first time this runs,
+      # so a fresh clone of the project deploys without a visit to Settings.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v4
         with:
           path: apps/web/out
