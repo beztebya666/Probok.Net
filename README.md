@@ -418,6 +418,12 @@ node tools/pages/build-static-demo.mjs
 `/api/health`, `/admin`) и возвращает на место даже при ошибке. Публикацией занимается
 [.github/workflows/pages.yml](.github/workflows/pages.yml).
 
+Сам сайт включается один раз руками: Settings → Pages → Source: GitHub Actions. Воркфлоу
+этого не может — у `GITHUB_TOKEN` нет права создавать Pages-сайт, и шаг `configure-pages`
+отвечает «Resource not accessible by integration» даже с `enablement: true`. Настройка
+слетает, если репозиторий делали приватным, и тогда её нужно включить заново: до тех пор
+каждый push падает на `configure-pages` с «Get Pages site failed: Not Found».
+
 ## Релизы и образы
 
 Тег `vX.Y.Z` запускает сборку: мультиплатформенные образы (`linux/amd64`, `linux/arm64`) уходят
