@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.14
 # Build on the host architecture and cross-compile: running the Go toolchain
 # under QEMU is slow and needlessly fragile.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm@sha256:6c5605ab3a9a9fb3c4eafe5b3d63cdbf3881caf113262b67862547b54a9db599 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
